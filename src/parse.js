@@ -75,6 +75,40 @@ export function makeContext({ names = [], rolesDoc = null, roleIndex = null } = 
   };
 }
 
+// ─────────────────────────────────────────── 검색 (초성)
+
+const CHO = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
+
+/** 한글 음절 → 초성. 한글이 아니면 그대로 둔다. */
+export function chosung(s) {
+  let out = '';
+  for (const ch of String(s ?? '')) {
+    const code = ch.codePointAt(0);
+    if (code >= 0xac00 && code <= 0xd7a3) out += CHO[Math.floor((code - 0xac00) / 588)];
+    else out += ch;
+  }
+  return out;
+}
+
+const ONLY_CHO = /^[ㄱ-ㅎ]+$/;
+
+/**
+ * 검색 한 벌. 부분 문자열이 기본이고, **질의가 전부 초성이면 초성으로 맞춘다.**
+ * `ㅅㅇㅁㄴ` 으로 `시어머니` 가 걸린다 — 한글 도구에서 사람이 기대하는 동작이다.
+ *
+ * ⚠ 계획서 §7 의 예시 「`엄`을 치면 엄마·시어머니·장모가 걸린다」 중
+ *   `시어머니` 는 이 방식으로 안 걸린다(그 글자에 「엄」이 없다).
+ *   같은 뜻을 다른 말로 부르는 건 검색이 아니라 `aliases` 가 맡는 일이다.
+ */
+export function matchesQuery(text, query) {
+  const q = norm(query);
+  if (!q) return true;
+  const t = norm(text);
+  if (t.includes(q)) return true;
+  if (ONLY_CHO.test(q)) return chosung(t).includes(q);
+  return false;
+}
+
 // ─────────────────────────────────────────── 따옴표 인식 분할
 
 /** 따옴표 **밖**에 있는 ch 의 위치를 전부 준다. 안쪽은 구분자로 안 본다(§6-4). */

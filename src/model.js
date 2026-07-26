@@ -2,12 +2,12 @@
 //
 // 상태를 바꾸는 건 전부 state.mutate() 를 지난다.
 
-import { state, mutate, parsed, byName as findByName, byId as findById } from './state.js?v=20260726d';
-import { norm, parseDocument, makeContext } from './parse.js?v=20260726d';
-import { mergeRoles } from './roles.js?v=20260726d';
+import { state, mutate, parsed, byName as findByName, byId as findById } from './state.js?v=20260726e';
+import { norm, parseDocument, makeContext } from './parse.js?v=20260726e';
+import { mergeRoles } from './roles.js?v=20260726e';
 import {
   findLinesWithName, removeLines, renameInLines, replaceLine, serializeRelation,
-} from './serialize.js?v=20260726d';
+} from './serialize.js?v=20260726e';
 
 // ─────────────────────────────────────────── id — 영구 결번(§4)
 
@@ -201,6 +201,89 @@ export function updateCharacter(id, patch) {
 /** 지금 쓰이는 소속 목록 — 시트의 자동완성에 쓴다. */
 export function groupNames() {
   return [...new Set(state.characters.map((c) => c.group).filter(Boolean))].sort();
+}
+
+// ─────────────────────────────────────────── `정리` 배치(§7)
+//
+// **배치는 자동으로 계속 움직이지 않는다.** 물리 시뮬레이션은 사용자가 놓은 자리를
+// 계속 밀어내서 싸움이 된다. 눌렀을 때만 **정해진 횟수만큼 돌고 멈춘다.**
+//
+// 한 번 누른 결과가 마음에 안 들면 되돌리기 한 번으로 원래 자리로 간다 —
+// 그래서 「자동으로 계속」이 아니라 「눌렀을 때 한 번」이 안전한 선택이 된다.
+
+const TIDY_STEPS = 260;
+const LINK_LEN = 165;        // 이어진 사람끼리 목표 거리
+const MIN_GAP = 92;          // 안 이어진 사람끼리 최소 거리 — 30명 밀도 문제(§7-1)
+
+export function tidyLayout() {
+  const chars = state.characters.filter((c) => Array.isArray(c.pos));
+  if (chars.length < 2) return { ok: false, error: '옮길 인물이 없습니다' };
+
+  const idx = new Map(chars.map((c, i) => [c.id, i]));
+  const pts = chars.map((c) => [c.pos[0], c.pos[1]]);
+
+  // 인접목록에서 간선을 뽑는다 (같은 쌍은 한 번만)
+  const seen = new Set();
+  const links = [];
+  for (const rel of parsed().relations) {
+    if (!rel.idA || !rel.idB || rel.idA === rel.idB) continue;
+    const a = idx.get(rel.idA), b = idx.get(rel.idB);
+    if (a === undefined || b === undefined) continue;
+    const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    links.push([a, b]);
+  }
+
+  const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+
+  for (let step = 0; step < TIDY_STEPS; step++) {
+    const cool = 1 - step / TIDY_STEPS;          // 식으면서 멈춘다
+    const fx = new Array(pts.length).fill(0);
+    const fy = new Array(pts.length).fill(0);
+
+    // 서로 밀기 — 겹치지 않게
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        let dx = pts[i][0] - pts[j][0];
+        let dy = (pts[i][1] - pts[j][1]) * 1.6;   // 세로를 더 아끼면 가로로 퍼진다
+        let d = Math.hypot(dx, dy);
+        if (d < 0.01) { dx = (i % 2 ? 1 : -1) * 0.7; dy = 0.7; d = 1; }
+        if (d > MIN_GAP * 3) continue;
+        const f = (MIN_GAP * MIN_GAP) / (d * d) * 2.4;
+        fx[i] += (dx / d) * f; fy[i] += (dy / d) * f;
+        fx[j] -= (dx / d) * f; fy[j] -= (dy / d) * f;
+      }
+    }
+
+    // 이어진 것끼리 당기기
+    for (const [a, b] of links) {
+      const dx = pts[b][0] - pts[a][0];
+      const dy = pts[b][1] - pts[a][1];
+      const d = Math.hypot(dx, dy) || 1;
+      const f = (d - LINK_LEN) * 0.045;
+      fx[a] += (dx / d) * f; fy[a] += (dy / d) * f;
+      fx[b] -= (dx / d) * f; fy[b] -= (dy / d) * f;
+    }
+
+    // 아무하고도 안 엮인 사람이 무한히 날아가지 않게 가운데로 살짝
+    for (let i = 0; i < pts.length; i++) {
+      fx[i] += (cx - pts[i][0]) * 0.006;
+      fy[i] += (cy - pts[i][1]) * 0.006;
+      const cap = 22 * cool;
+      pts[i][0] += Math.max(-cap, Math.min(cap, fx[i]));
+      pts[i][1] += Math.max(-cap, Math.min(cap, fy[i]));
+    }
+  }
+
+  return mutate('정리', (s) => {
+    for (const c of s.characters) {
+      const i = idx.get(c.id);
+      if (i !== undefined) c.pos = [Math.round(pts[i][0]), Math.round(pts[i][1])];
+    }
+    return { ok: true, moved: chars.length };
+  });
 }
 
 // ─────────────────────────────────────────── 텍스트 반영

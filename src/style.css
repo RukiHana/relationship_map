@@ -369,6 +369,58 @@ button.primary { font-weight: 700; }
 }
 #graph-tools button { box-shadow: 0 1px 3px rgba(20, 20, 30, .10); }
 
+/* 검색 — 걸린 노드에 표시. 나머지는 흐려진다 */
+
+#search {
+  font: 12px var(--sans);
+  padding: 6px 9px;
+  min-height: 30px;
+  width: 150px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+  background: #fff;
+}
+#search:focus { border-color: var(--ink-faint); }
+
+.graph.searching .node { opacity: .24; }
+.graph.searching .node.hit {
+  opacity: 1;
+  border-color: #b8892f;
+  box-shadow: 0 0 0 3px rgba(184, 137, 47, .22), 0 1px 3px rgba(20, 20, 30, .08);
+}
+
+/* 계열 범례와 필터(4단계) */
+
+#legend {
+  position: absolute;
+  left: 12px; bottom: 52px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(20, 20, 30, .12);
+  padding: 6px 0;
+  font-size: 11.5px;
+  z-index: 5;
+  max-height: calc(100% - 80px);
+  overflow: auto;
+}
+#legend .row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+#legend .row:hover { background: #f4f6f8; }
+#legend .row.off { opacity: .38; text-decoration: line-through; }
+#legend .sw { width: 16px; height: 3px; border-radius: 2px; flex: 0 0 auto; }
+#legend .sw.dashed { background-image: linear-gradient(90deg, currentColor 60%, transparent 60%); background-size: 5px 3px; }
+#legend .n { color: var(--ink-dim); margin-left: auto; padding-left: 10px; }
+#legend .hint { padding: 5px 12px 3px; color: var(--ink-faint); font-size: 10.5px; border-top: 1px solid var(--line-soft); margin-top: 4px; }
+
+#graph-tools { flex-wrap: wrap; max-width: calc(100% - 24px); }
+
 /* 선 후보 목록 — 거의 겹친 두 선을 눌렀을 때(§7) */
 #edge-pick {
   position: absolute;

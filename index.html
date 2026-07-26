@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="charmap">
 <meta name="color-scheme" content="light">
 <title>charmap</title>
-<link rel="stylesheet" href="src/style.css?v=20260726d">
+<link rel="stylesheet" href="src/style.css?v=20260726e">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='9' cy='10' r='4' fill='%238a94a3'/><circle cx='23' cy='21' r='4' fill='%235c6675'/><path d='M11 13 L21 18' stroke='%23c2683f' stroke-width='2'/></svg>">
 </head>
 <body>
@@ -23,6 +23,9 @@
     <button id="btn-import" class="primary" title="매 작업의 정상적인 시작점입니다">파일 열기</button>
     <button id="btn-paste">붙여넣기</button>
     <button id="btn-export" class="primary">데이터 내보내기</button>
+    <!-- 크롬 계열에만 있는 기능. 없으면 main.js 가 이 단추를 숨긴다(§8) -->
+    <button id="btn-save" hidden title="한 번 고른 파일에 계속 덮어씁니다">저장</button>
+    <input id="search" type="search" placeholder="인물 찾기 (초성도 됩니다)" autocomplete="off" spellcheck="false">
     <span class="pill" id="pill-count">0명 · 0건</span>
     <span class="spacer"></span>
     <button id="btn-undo" title="되돌리기">↶</button>
@@ -51,9 +54,16 @@
           <!-- 아이패드에서 관계를 만드는 정식 경로. 켜고 A 탭 → B 탭 (§7) -->
           <button id="btn-connect" title="켜고 두 노드를 차례로 누르면 관계가 만들어집니다">연결</button>
           <button id="btn-showall" title="기본은 노드만. 누르면 선과 라벨 전부">전체 보기</button>
+          <!-- 눌렀을 때만 한 번 정렬하고 멈춘다. 자동으로 계속 움직이지 않는다(§7) -->
+          <button id="btn-tidy" title="눌렀을 때만 한 번 정렬합니다. 마음에 안 들면 되돌리기">정리</button>
+          <button id="btn-legend" title="계열 색 · 눌러서 선 감추기">범례</button>
+          <button id="btn-svg" title="전체 보기 상태를 SVG 로 뽑습니다">SVG</button>
           <button id="btn-fit" title="전부 보이게 맞춤">맞춤</button>
           <button id="btn-collapse-graph" title="관계도 접기">▲</button>
         </div>
+
+        <!-- 계열 범례와 필터. 줄을 누르면 그 계열의 선이 숨는다 -->
+        <div id="legend" hidden></div>
       </div>
     </section>
 
@@ -87,7 +97,7 @@
 
 <div id="modal-back"></div>
 
-<script type="module" src="src/main.js?v=20260726d"></script>
+<script type="module" src="src/main.js?v=20260726e"></script>
 <noscript>이 도구는 자바스크립트가 있어야 돕니다.</noscript>
 
 </body>

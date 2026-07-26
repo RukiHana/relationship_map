@@ -9,9 +9,9 @@
 //   그래서 §11 의 점검은 src 안에서 그 경로 문자열이 **하나도 안 나오는 것**을 본다.
 //   설명하려고 적은 주석까지 걸리면 점검이 무뎌지므로 여기서도 안 적는다(CLAUDE.md 규칙 2).
 
-import { state, markExported, dirtyCount } from './state.js?v=20260726d';
-import { packBundle, unpackBundle, bundleFileName } from './serialize.js?v=20260726d';
-import { nfc } from './parse.js?v=20260726d';
+import { state, markExported, dirtyCount } from './state.js?v=20260726e';
+import { packBundle, unpackBundle, bundleFileName } from './serialize.js?v=20260726e';
+import { nfc } from './parse.js?v=20260726e';
 
 const KEY = 'charmap.work';
 const SNAP_KEY = 'charmap.snap';      // 직전 상태 3개를 굴린다
@@ -151,6 +151,60 @@ export function exportBundle(vocabDoc) {
   const ok = download(name, text);
   if (ok) markExported();
   return { ok, name, text };
+}
+
+// ─────────────────────────────────────────── 지정한 파일에 덮어쓰기(§8)
+//
+// **크롬 계열에만 있는 기능. 없으면 버튼을 숨긴다.**
+// 한 번 자리를 고르면 그 파일에 계속 덮어쓴다 — 파일 앱에 `charmap (1).json`,
+// `charmap (2).json` 이 쌓이는 걸 피하고 싶을 때 쓴다.
+//
+// ⚠ 저장 자리를 저장소 폴더로 잡으면 `charmap*.json` 이 거기 생긴다.
+//   `.gitignore` 가 그 이름을 막고 있는 이유가 정확히 이것이다(§1).
+
+let fileHandle = null;
+
+export function canSaveInPlace() {
+  return typeof window.showSaveFilePicker === 'function';
+}
+
+export function savedFileName() {
+  return fileHandle?.name ?? null;
+}
+
+/**
+ * @param {boolean} pickNew  true 면 자리를 다시 고른다
+ * @returns {{ ok, name?, error?, cancelled? }}
+ */
+export async function saveInPlace(vocabDoc, { pickNew = false } = {}) {
+  if (!canSaveInPlace()) return { ok: false, error: '이 브라우저에는 없는 기능입니다' };
+
+  const now = new Date();
+  const bundle = packBundle({
+    characters: state.characters,
+    lines: state.lines,
+    roles: vocabDoc,
+    nextId: state.nextId,
+  }, now);
+  const text = JSON.stringify(bundle, null, 1);
+
+  try {
+    if (pickNew || !fileHandle) {
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName: bundleFileName(now),
+        types: [{ description: 'charmap 번들', accept: { 'application/json': ['.json'] } }],
+      });
+    }
+    const w = await fileHandle.createWritable();
+    await w.write(text);
+    await w.close();
+    markExported();
+    return { ok: true, name: fileHandle.name };
+  } catch (e) {
+    if (e?.name === 'AbortError') return { ok: false, cancelled: true };
+    fileHandle = null;
+    return { ok: false, error: e?.message ?? String(e) };
+  }
 }
 
 function download(name, text) {

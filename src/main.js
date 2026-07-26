@@ -4,32 +4,34 @@
 // 조용한 복원은 하지 않는다 — 그 상태에서 파일을 가져오면 「아까 그건 어디 갔지」가
 // 된다(계획서 §8).
 
-import { VERSION } from './version.js?v=20260726d';
+import { VERSION } from './version.js?v=20260726e';
 import {
   state, subscribe, hydrate, mutate, touchUI, undo, redo, canUndo, canRedo,
   dirtyCount, markExported, parsed, vocabulary, setSaver, flushSave, byId,
-} from './state.js?v=20260726d';
+} from './state.js?v=20260726e';
 import {
   addCharacter, previewRename, applyRename, previewDelete, applyDelete,
-  loadBundle, addSessionRole,
+  loadBundle, addSessionRole, tidyLayout,
   appendRelationLine, replaceRelationLine, deleteRelationLine,
-} from './model.js?v=20260726d';
-import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726d';
-import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726d';
+} from './model.js?v=20260726e';
+import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726e';
+import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726e';
 import {
   initGraph, select, toggleShowAll, setHotRelation, fitToView,
   setConnectMode, isConnectMode,
-} from './ui_graph.js?v=20260726d';
-import { pickRoles } from './ui_roles.js?v=20260726d';
-import { openSheet, characterJSON } from './ui_sheet.js?v=20260726d';
-import { initCard } from './ui_card.js?v=20260726d';
+  setHiddenCategories, hiddenCategories, setQuery, centerOn, buildSVG,
+} from './ui_graph.js?v=20260726e';
+import { pickRoles } from './ui_roles.js?v=20260726e';
+import { openSheet, characterJSON } from './ui_sheet.js?v=20260726e';
+import { initCard } from './ui_card.js?v=20260726e';
 import {
   initIO, saveWork, loadWork, clearWork, storageWorks, pushSnapshot,
   setOtherTabHandler, exportBundle, copyText, readFile, prepareImport, describeCompare,
-} from './io.js?v=20260726d';
+  canSaveInPlace, saveInPlace, savedFileName,
+} from './io.js?v=20260726e';
 import {
   confirmBox, alertBox, promptBox, pasteBox, selectableBox, checkListBox, notice,
-} from './ui_dialog.js?v=20260726d';
+} from './ui_dialog.js?v=20260726e';
 
 const $ = (id) => document.getElementById(id);
 
@@ -174,6 +176,8 @@ function renderChrome() {
   $('btn-showall').classList.toggle('on', state.ui.showAll);
 
   renderUnknownRoles();
+  renderTempRoles();
+  renderLegend();
 
   // 사파리는 오래 안 쓴 사이트의 저장분을 지우는 경우가 있다(약 7일).
   // **믿고 맡길 대상이 아니다**(§8).
@@ -212,6 +216,59 @@ function renderUnknownRoles() {
     dismissable: true,
   });
   el.dataset.sig = text;
+}
+
+/**
+ * **얹힌 어휘는 화면에서 「임시」로 표시한다**(§5).
+ * 이게 없으면 임시 어휘가 파일을 타고 몇 달을 굴러다니는데 정작 `roles.json` 은
+ * 계속 비어 있다. 여기가 그 표시이자 저장소로 올리는 입구다.
+ */
+function renderTempRoles() {
+  const host = $('notices');
+  const temp = vocabulary().tempRoles;
+  const old = host.querySelector('[data-nid="temp"]');
+  if (!temp.length) { old?.remove(); return; }
+
+  const text = `이 자리에서만 사는 어휘 ${temp.length}개 — ${temp.slice(0, 5).map((r) => r.label).join(', ')}${temp.length > 5 ? ' …' : ''}`;
+  if (old && old.dataset.sig === text) return;
+  old?.remove();
+
+  const el = notice({
+    id: 'temp', kind: '', text,
+    actions: [{ label: '저장소에 넣을 것 고르기', keep: true, onClick: copyTempRoles }],
+    dismissable: true,
+  });
+  el.dataset.sig = text;
+}
+
+/**
+ * 임시 어휘 중 **고른 것만** `roles.json` 에 붙여넣을 형태로 클립보드에 담는다(§5).
+ * 전부 담아주면 생각 없이 붙여넣게 되고, 그러면
+ * 「세계관 고유명은 커밋 안 한다」 규칙이 없는 것과 같아진다.
+ */
+async function copyTempRoles() {
+  const temp = vocabulary().tempRoles;
+  if (!temp.length) {
+    await alertBox({ title: '임시 어휘가 없습니다', message: '전부 저장소 목록에 있는 말입니다.' });
+    return;
+  }
+  const picked = await checkListBox({
+    title: '저장소에 넣을 것 고르기',
+    message: 'src/roles.json 은 커밋되고 공개됩니다. 세계관 고유명이 든 어휘는 고르지 마세요. '
+      + '안 고른 것도 없어지지 않습니다 — 내보낸 파일 안에서 계속 삽니다.',
+    items: temp,
+    renderItem: (r) => `<code>${r.label}</code> <span class="cat">${r.category ?? ''}</span>`,
+  });
+  if (!picked?.length) return;
+
+  const text = clipboardForRepo(picked);
+  const how = await copyText(text);
+  if (how === 'manual') {
+    await selectableBox({ title: 'roles.json 에 붙여넣을 것', text });
+  } else {
+    notice({ id: 'temp-copied', kind: 'good', text: `${picked.length}개를 클립보드에 담았습니다. src/roles.json 의 roles 배열에 붙여넣고 커밋하세요.` });
+    setTimeout(() => document.querySelector('[data-nid="temp-copied"]')?.remove(), 8000);
+  }
 }
 
 async function addRoleFlow(labels) {
@@ -267,6 +324,12 @@ function wireToolbar() {
   $('btn-import').addEventListener('click', pickFile);
   $('btn-paste').addEventListener('click', pasteImport);
   $('btn-export').addEventListener('click', doExport);
+
+  // **크롬 계열에만 있는 기능. 없으면 버튼을 숨긴다**(§8)
+  if (canSaveInPlace()) {
+    $('btn-save').hidden = false;
+    $('btn-save').addEventListener('click', (e) => doSaveInPlace({ pickNew: e.shiftKey }));
+  }
   $('btn-undo').addEventListener('click', () => { flushText(); undo(); });
   $('btn-redo').addEventListener('click', () => { flushText(); redo(); });
   $('btn-add').addEventListener('click', addCharacterFlow);
@@ -274,6 +337,10 @@ function wireToolbar() {
   $('btn-connect').addEventListener('click', () => setConnectMode(!isConnectMode()));
   $('btn-showall').addEventListener('click', () => { toggleShowAll(); renderChrome(); });
   $('btn-fit').addEventListener('click', () => fitToView());
+  $('btn-tidy').addEventListener('click', doTidy);
+  $('btn-legend').addEventListener('click', toggleLegend);
+  $('btn-svg').addEventListener('click', doExportSVG);
+  wireSearch();
   $('btn-collapse-graph').addEventListener('click', () => collapse('graph'));
   $('btn-collapse-list').addEventListener('click', () => collapse('list'));
   $('btn-copy-lines').addEventListener('click', copyRelationLines);
@@ -464,6 +531,16 @@ async function doExport() {
   markExported();
 }
 
+/** 한 번 고른 파일에 계속 덮어쓴다. Shift 를 누르고 누르면 자리를 다시 고른다. */
+async function doSaveInPlace({ pickNew = false } = {}) {
+  flushText();
+  const r = await saveInPlace(vocabulary().doc, { pickNew });
+  if (r.cancelled) return;
+  if (!r.ok) { await alertBox({ title: '저장하지 못했습니다', message: r.error }); return; }
+  notice({ id: 'saved', kind: 'good', text: `${r.name} 에 저장했습니다.` });
+  setTimeout(() => document.querySelector('[data-nid="saved"]')?.remove(), 5000);
+}
+
 async function copyRelationLines() {
   flushText();
   const text = relationLinesText();
@@ -544,6 +621,119 @@ function applyRatio() {
   l.style.flex = `${100 - r} 1 0%`;
   $('btn-collapse-graph').textContent = '▲';
   $('btn-collapse-list').textContent = '▼';
+}
+
+// ─────────────────────────────────────────── 4단계
+
+/**
+ * **눌렀을 때만 한 번 정렬하고 멈춘다**(§7). 물리 시뮬레이션을 켜두면 사용자가
+ * 놓은 자리를 계속 밀어내서 싸움이 된다. 마음에 안 들면 되돌리기 한 번이다.
+ */
+function doTidy() {
+  const r = tidyLayout();
+  if (!r?.ok) return;
+  fitToView();
+  notice({ id: 'tidy', kind: '', text: `${r.moved}명을 다시 놓았습니다. 마음에 안 들면 되돌리기(↶) 한 번이면 원래 자리로 갑니다.` });
+  setTimeout(() => document.querySelector('[data-nid="tidy"]')?.remove(), 6000);
+}
+
+/** 계열 범례 — 줄을 누르면 그 계열의 **선만** 감춘다. 노드는 그대로 둔다. */
+function toggleLegend() {
+  const box = $('legend');
+  box.hidden = !box.hidden;
+  $('btn-legend').classList.toggle('on', !box.hidden);
+  if (!box.hidden) renderLegend();
+}
+
+function renderLegend() {
+  const box = $('legend');
+  if (box.hidden) return;
+  const vocab = vocabulary();
+  const hidden = hiddenCategories();
+
+  // 지금 실제로 쓰이는 계열만 센다 — 205개 어휘의 계열을 다 띄우면 목록이 된다
+  const used = new Map();
+  for (const rel of parsed().relations) {
+    const k = rel.category ?? '_unknown';
+    used.set(k, (used.get(k) ?? 0) + 1);
+  }
+
+  box.textContent = '';
+  if (!used.size) {
+    const e = document.createElement('div');
+    e.className = 'hint';
+    e.textContent = '아직 관계가 없습니다.';
+    box.appendChild(e);
+    return;
+  }
+
+  for (const [catId, n] of [...used.entries()].sort((a, b) => b[1] - a[1])) {
+    const cat = vocab.doc.categories.find((c) => c.id === catId)
+      ?? { id: catId, label: catId === '_unknown' ? '목록에 없는 말' : catId, color: '#b6bcc4', style: 'solid' };
+    const row = document.createElement('div');
+    row.className = `row${hidden.has(catId) ? ' off' : ''}`;
+    row.title = hidden.has(catId) ? '눌러서 다시 보이기' : '눌러서 이 계열의 선 감추기';
+
+    const sw = document.createElement('span');
+    sw.className = `sw${(cat.style ?? 'solid') !== 'solid' ? ' dashed' : ''}`;
+    sw.style.color = cat.color;
+    sw.style.background = (cat.style ?? 'solid') === 'solid' ? cat.color : '';
+    const nm = document.createElement('span');
+    nm.textContent = cat.label;
+    const cnt = document.createElement('span');
+    cnt.className = 'n';
+    cnt.textContent = n;
+    row.append(sw, nm, cnt);
+
+    row.addEventListener('click', () => {
+      const next = hiddenCategories();
+      next.has(catId) ? next.delete(catId) : next.add(catId);
+      setHiddenCategories(next);
+      renderLegend();
+    });
+    box.appendChild(row);
+  }
+
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = '줄을 누르면 그 계열의 선이 숨습니다. 노드는 그대로 있습니다.';
+  box.appendChild(hint);
+}
+
+/** 인물 찾기 — 초성도 받는다. Enter 면 첫 번째를 골라 화면 가운데로. */
+function wireSearch() {
+  const input = $('search');
+  let hits = [];
+  input.addEventListener('input', () => { hits = setQuery(input.value); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { input.value = ''; setQuery(''); input.blur(); return; }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (!hits.length) return;
+    select(hits[0].id);
+    centerOn(hits[0].id);
+  });
+}
+
+/** **`전체 보기` 상태를 뽑는다**(§7) — 기본 상태를 뽑으면 점 30개짜리 그림이 나온다. */
+async function doExportSVG() {
+  flushText();
+  const svg = buildSVG();
+  if (!svg) { await alertBox({ title: '뽑을 게 없습니다', message: '먼저 인물을 만들어주세요.' }); return; }
+
+  const name = `charmap-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.svg`;
+  try {
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    notice({ id: 'svg', kind: 'good', text: `${name} 로 뽑았습니다.` });
+    setTimeout(() => document.querySelector('[data-nid="svg"]')?.remove(), 5000);
+  } catch {
+    const how = await copyText(svg);
+    if (how === 'manual') await selectableBox({ title: '관계도 SVG', message: '전체 선택해 뒀습니다.', text: svg });
+  }
 }
 
 // ─────────────────────────────────────────── 선을 눌렀을 때(3단계)
@@ -649,28 +839,5 @@ function otherTabOpened() {
     text: '이 앱을 다른 탭에서도 열었습니다. 나중에 저장하는 쪽이 앞 탭을 덮어씁니다. 한쪽만 쓰세요.',
   });
 }
-
-// ─────────────────────────────────────────── 어휘 유출 방지(§5)
-
-/**
- * 임시 어휘 중 **고른 것만** `roles.json` 에 붙여넣을 형태로 클립보드에 담는다.
- * 전부 담아주면 생각 없이 붙여넣게 되고, 그러면 이 규칙은 없는 것과 같다.
- * 창에서 부르는 자리는 아직 없다 — 콘솔에서 `charmapCopyTempRoles()` 로 부른다.
- */
-window.charmapCopyTempRoles = async function copyTempRoles() {
-  const temp = vocabulary().tempRoles;
-  if (!temp.length) { await alertBox({ title: '임시 어휘가 없습니다', message: '전부 저장소 목록에 있는 말입니다.' }); return; }
-  const picked = await checkListBox({
-    title: '저장소에 넣을 것 고르기',
-    message: 'src/roles.json 은 커밋되고 공개됩니다. 세계관 고유명이 든 어휘는 고르지 마세요. '
-      + '안 고른 것도 없어지지 않습니다 — 내보낸 파일 안에서 계속 삽니다.',
-    items: temp,
-    renderItem: (r) => `<code>${r.label}</code> <span class="cat">${r.category ?? ''}</span>`,
-  });
-  if (!picked?.length) return;
-  const text = clipboardForRepo(picked);
-  const how = await copyText(text);
-  if (how === 'manual') await selectableBox({ title: 'roles.json 에 붙여넣을 것', text });
-};
 
 export { }; // 모듈 표시

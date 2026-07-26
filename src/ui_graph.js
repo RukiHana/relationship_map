@@ -11,9 +11,10 @@
 // 아이패드에는 1단계가 없다 — 터치에 호버가 없어서 탭하면 곧바로 2단계로 간다.
 // **길게 누르기는 쓰지 않는다.** 브라우저 자체 메뉴와 충돌한다.
 
-import { state, parsed, adjacency, vocabulary, touchUI, subscribe, byId } from './state.js?v=20260726d';
-import { moveCharacter, groupColor } from './model.js?v=20260726d';
-import { colorOf, styleOf } from './roles.js?v=20260726d';
+import { state, parsed, adjacency, vocabulary, touchUI, subscribe, byId } from './state.js?v=20260726e';
+import { moveCharacter, groupColor } from './model.js?v=20260726e';
+import { colorOf, styleOf } from './roles.js?v=20260726e';
+import { matchesQuery } from './parse.js?v=20260726e';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -39,6 +40,10 @@ let connectMode = false;   // 아이패드 경로: 버튼을 켜고 A 탭 → B 
 let connectFrom = null;    // 연결 모드에서 먼저 고른 인물
 let wire = null;           // 연결점을 끄는 중 { fromId, x, y }
 let wireEl = null;         // 고무줄 선
+
+// ── 4단계
+let hiddenCats = new Set();  // 범례에서 끈 계열
+let query = '';              // 검색어 — 걸리는 노드만 표시가 붙는다
 
 // ─────────────────────────────────────────── 초기화
 
@@ -365,6 +370,34 @@ export function toggleShowAll() {
   return state.ui.showAll;
 }
 
+// ─────────────────────────────────────────── 4단계 — 범례 필터 · 검색
+
+/** 계열 범례에서 끈 것들. 노드는 그대로 두고 **선만** 감춘다. */
+export function setHiddenCategories(set) {
+  hiddenCats = new Set(set ?? []);
+  drawEdges();
+}
+
+export function hiddenCategories() { return new Set(hiddenCats); }
+
+/** 검색어에 걸리는 노드에 표시를 붙인다. 초성도 받는다(`ㅈㄴ` → 지나). */
+export function setQuery(q) {
+  query = String(q ?? '').trim();
+  render();
+  return state.characters.filter((c) => query && matchesQuery(c.name, query));
+}
+
+/** 그 인물이 화면 가운데 오게. 배율은 안 건드린다. */
+export function centerOn(id) {
+  const c = byId(id);
+  if (!c || !Array.isArray(c.pos)) return;
+  const r = graph.getBoundingClientRect();
+  if (r.width < 40) return;
+  state.ui.tx = r.width / 2 - c.pos[0] * state.ui.scale;
+  state.ui.ty = r.height / 2 - c.pos[1] * state.ui.scale;
+  applyTransform();
+}
+
 /** 카드의 줄에 손을 올리면 해당 선이 굵어진다 — 역방향 연결(§7). */
 export function setHotRelation(rel) {
   hotKey = rel ? keyOf(rel) : null;
@@ -420,7 +453,9 @@ function drawNodes() {
     el.classList.toggle('focus', c.id === focus);
     el.classList.toggle('related', !!related && related.has(c.id));
     el.classList.toggle('connect-from', connectMode && connectFrom === c.id);
+    el.classList.toggle('hit', !!query && matchesQuery(c.name, query));
   }
+  graph.classList.toggle('searching', !!query);
 
   for (const [id, el] of nodeEls) {
     if (!alive.has(id)) { el.remove(); nodeEls.delete(id); }
@@ -442,6 +477,7 @@ function visibleGroups() {
   for (const rel of p.relations) {
     if (!rel.idA || !rel.idB) continue;
     if (rel.idA === rel.idB) continue;                     // 자기 자신은 그릴 방법이 없다(§6)
+    if (hiddenCats.has(rel.category ?? '_unknown')) continue;      // 범례에서 끈 계열
     if (!state.ui.showAll && (!focus || (rel.idA !== focus && rel.idB !== focus))) continue;
     const k = keyOf(rel);
     if (!groups.has(k)) groups.set(k, { key: k, rels: [] });
@@ -609,6 +645,110 @@ function showEdgePick(clientX, clientY, groups) {
   box.style.left = `${Math.min(clientX - r.left, r.width - 160)}px`;
   box.style.top = `${Math.min(clientY - r.top, r.height - 40 - groups.length * 26)}px`;
   box.classList.add('open');
+}
+
+// ─────────────────────────────────────────── SVG 내보내기(§7)
+
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * **`전체 보기` 상태를 뽑는다.** 기본 상태(노드만)를 뽑으면 점 30개짜리 그림이 나온다.
+ * 그래서 화면이 지금 어떤 상태든 상관없이 선과 라벨을 전부 그린 SVG 를 만든다.
+ *
+ * 노드 크기는 화면에 그려진 실제 상자에서 읽는다 — 한글 폭을 따로 계산하지 않아도 된다.
+ */
+export function buildSVG({ pad = 60 } = {}) {
+  const vocab = vocabulary();
+  const chars = state.characters.filter((c) => Array.isArray(c.pos));
+  if (!chars.length) return null;
+
+  // 노드 상자 크기 (CSS 픽셀 — transform 은 offsetWidth 에 안 섞인다)
+  const box = new Map();
+  for (const c of chars) {
+    const el = nodeEls.get(c.id);
+    box.set(c.id, [el?.offsetWidth || 58, el?.offsetHeight || 24]);
+  }
+
+  const xs = chars.flatMap((c) => [c.pos[0] - box.get(c.id)[0] / 2, c.pos[0] + box.get(c.id)[0] / 2]);
+  const ys = chars.flatMap((c) => [c.pos[1] - box.get(c.id)[1] / 2, c.pos[1] + box.get(c.id)[1] / 2]);
+  const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad;
+  const w = Math.max(...xs) - x0 + pad, h = Math.max(...ys) - y0 + pad;
+
+  // 관계를 쌍으로 묶어 평행선을 화면과 같게 벌린다
+  const groups = new Map();
+  for (const rel of parsed().relations) {
+    if (!rel.idA || !rel.idB || rel.idA === rel.idB) continue;
+    if (hiddenCats.has(rel.category ?? '_unknown')) continue;
+    const k = rel.idA < rel.idB ? `${rel.idA}|${rel.idB}` : `${rel.idB}|${rel.idA}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(rel);
+  }
+
+  const edgeParts = [];
+  const labelParts = [];
+
+  for (const rels of groups.values()) {
+    const n = rels.length;
+    rels.forEach((rel, i) => {
+      const a = byId(rel.idA).pos, b = byId(rel.idB).pos;
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;
+      const off = n === 1 ? 0 : (i - (n - 1) / 2) * PARALLEL_GAP;
+      const c = [(a[0] + b[0]) / 2 + nx * off, (a[1] + b[1]) / 2 + ny * off];
+      const color = colorOf(vocab, rel.category);
+      const dash = styleOf(vocab, rel.category) !== 'solid' ? ' stroke-dasharray="3 2"' : '';
+      const d = off === 0 ? `M ${a[0]} ${a[1]} L ${b[0]} ${b[1]}` : `M ${a[0]} ${a[1]} Q ${c[0]} ${c[1]} ${b[0]} ${b[1]}`;
+      edgeParts.push(`<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round"${dash}/>`);
+
+      if (rel.oneSided) {
+        const t = rel.oneSided === 'B' ? 0.83 : 0.17;
+        const [ax, ay] = quad(a, c, b, t);
+        const [bx, by] = quad(a, c, b, t + (rel.oneSided === 'B' ? 0.02 : -0.02));
+        const ang = Math.atan2(by - ay, bx - ax);
+        const s = 5;
+        const tri = [ang, ang + 2.5, ang - 2.5].map((r) => `${(ax + Math.cos(r) * s).toFixed(1)},${(ay + Math.sin(r) * s).toFixed(1)}`);
+        edgeParts.push(`<polygon points="${tri.join(' ')}" fill="${color}"/>`);
+      }
+
+      for (const [role, t] of [[rel.roleA, 0.2], [rel.roleB, 0.8]]) {
+        if (!role || role.empty) continue;            // 한쪽 관계는 빈 쪽을 안 그린다
+        const [lx, ly] = quad(a, c, b, t);
+        const tw = role.text.length * 7.4 + 12;       // 한글 폭 어림 — 배경 칩 크기용
+        labelParts.push(
+          `<g><rect x="${(lx - tw / 2).toFixed(1)}" y="${(ly - 8).toFixed(1)}" width="${tw.toFixed(1)}" height="16" rx="6" fill="rgba(255,255,255,.85)"/>`
+          + `<text x="${lx.toFixed(1)}" y="${(ly + 3.5).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="600" fill="${color}">${esc(role.text)}</text></g>`,
+        );
+      }
+    });
+  }
+
+  const nodeParts = chars.map((c) => {
+    const [bw, bh] = box.get(c.id);
+    const x = c.pos[0] - bw / 2, y = c.pos[1] - bh / 2;
+    const lonely = (adjacency().get(c.id)?.rels.length ?? 0) === 0;
+    const dot = resolveVar(groupColor(c));
+    return `<g>`
+      + `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw}" height="${bh}" rx="6" fill="#fff" `
+      + `stroke="${lonely ? '#c9ced6' : '#dfe2e7'}"${lonely ? ' stroke-dasharray="3 2"' : ''}/>`
+      + `<circle cx="${(x + 13.5).toFixed(1)}" cy="${c.pos[1].toFixed(1)}" r="3.5" fill="${dot}"/>`
+      + `<text x="${(x + 23).toFixed(1)}" y="${(c.pos[1] + 4).toFixed(1)}" font-size="12" font-weight="700" fill="#20242b">${esc(c.name)}</text>`
+      + `</g>`;
+  });
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(w)}" height="${Math.round(h)}" `
+    + `viewBox="${x0.toFixed(1)} ${y0.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}" `
+    + `font-family="-apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif">\n`
+    + `<rect x="${x0.toFixed(1)}" y="${y0.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="#fafafa"/>\n`
+    + edgeParts.join('\n') + '\n' + nodeParts.join('\n') + '\n' + labelParts.join('\n') + '\n</svg>\n';
+}
+
+/** `var(--grp-1)` 같은 값을 실제 색으로 바꾼다 — SVG 파일에는 CSS 변수가 없다. */
+function resolveVar(value) {
+  const m = /^var\((--[a-z0-9-]+)\)$/i.exec(String(value ?? '').trim());
+  if (!m) return value || '#8a94a3';
+  const v = getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim();
+  return v || '#8a94a3';
 }
 
 function hideEdgePick() {

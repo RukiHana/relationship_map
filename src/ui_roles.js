@@ -11,9 +11,9 @@
 //   · `pair` 로 반대쪽을 자동 제안한다. **강제가 아니라 제안**이라 틀려도 손해가 없다
 //   · 그룹 계열(`groupOnly`)은 흐리게 두고, 고르면 v1 에서 어떻게 되는지 알린다
 
-import { vocabulary, adjacency, byId } from './state.js?v=20260726d';
-import { groupByCategory, suggestPair } from './roles.js?v=20260726d';
-import { norm } from './parse.js?v=20260726d';
+import { vocabulary, adjacency, byId } from './state.js?v=20260726e';
+import { groupByCategory, suggestPair } from './roles.js?v=20260726e';
+import { norm, matchesQuery } from './parse.js?v=20260726e';
 
 const OPEN_TIER = 1;   // 항상 열려 있는 층위
 
@@ -251,8 +251,8 @@ function el(tag, cls = '', text = '') {
 function matches(role, q) {
   if (role.hidden) return false;
   if (!q) return true;
-  const hay = [role.label, ...(role.aliases ?? [])].map(norm);
-  return hay.some((h) => h.includes(q));
+  // label 과 aliases 를 같이 본다 — `오빠` 를 쳐도 `형` 이 걸린다(§7-1)
+  return [role.label, ...(role.aliases ?? [])].some((h) => matchesQuery(h, q));
 }
 
 /** `엄마(의붓)` → { label: '엄마', mods: ['의붓'] } */
