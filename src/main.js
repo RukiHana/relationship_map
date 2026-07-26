@@ -4,34 +4,35 @@
 // 조용한 복원은 하지 않는다 — 그 상태에서 파일을 가져오면 「아까 그건 어디 갔지」가
 // 된다(계획서 §8).
 
-import { VERSION } from './version.js?v=20260726e';
+import { VERSION } from './version.js?v=20260726f';
 import {
   state, subscribe, hydrate, mutate, touchUI, undo, redo, canUndo, canRedo,
   dirtyCount, markExported, parsed, vocabulary, setSaver, flushSave, byId,
-} from './state.js?v=20260726e';
+} from './state.js?v=20260726f';
 import {
   addCharacter, previewRename, applyRename, previewDelete, applyDelete,
   loadBundle, addSessionRole, tidyLayout,
   appendRelationLine, replaceRelationLine, deleteRelationLine,
-} from './model.js?v=20260726e';
-import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726e';
-import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726e';
+} from './model.js?v=20260726f';
+import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726f';
+import { serializeRelation, replaceLine } from './serialize.js?v=20260726f';
+import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726f';
 import {
   initGraph, select, toggleShowAll, setHotRelation, fitToView,
   setConnectMode, isConnectMode,
   setHiddenCategories, hiddenCategories, setQuery, centerOn, buildSVG,
-} from './ui_graph.js?v=20260726e';
-import { pickRoles } from './ui_roles.js?v=20260726e';
-import { openSheet, characterJSON } from './ui_sheet.js?v=20260726e';
-import { initCard } from './ui_card.js?v=20260726e';
+} from './ui_graph.js?v=20260726f';
+import { pickRoles } from './ui_roles.js?v=20260726f';
+import { openSheet, characterJSON } from './ui_sheet.js?v=20260726f';
+import { initCard } from './ui_card.js?v=20260726f';
 import {
   initIO, saveWork, loadWork, clearWork, storageWorks, pushSnapshot,
   setOtherTabHandler, exportBundle, copyText, readFile, prepareImport, describeCompare,
   canSaveInPlace, saveInPlace, savedFileName,
-} from './io.js?v=20260726e';
+} from './io.js?v=20260726f';
 import {
   confirmBox, alertBox, promptBox, pasteBox, selectableBox, checkListBox, notice,
-} from './ui_dialog.js?v=20260726e';
+} from './ui_dialog.js?v=20260726f';
 
 const $ = (id) => document.getElementById(id);
 
@@ -84,6 +85,37 @@ async function boot() {
 
   offerRestore();
   renderChrome();
+  registerOffline();
+}
+
+/**
+ * 오프라인(§10 4단계). **배포본에서만 등록한다.**
+ *
+ * 로컬 개발에서 켜면 `?v=` 를 안 올린 채 고친 파일이 캐시에서 나와서
+ * 「고쳤는데 왜 그대로지」를 스스로 만든다 — 서비스워커를 넣는 이유가
+ * 정확히 그 증상을 없애는 것인데 개발 중에는 그게 뒤집힌다.
+ */
+function registerOffline() {
+  if (!('serviceWorker' in navigator)) return;
+  const h = location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1' || h === '') return;
+
+  navigator.serviceWorker.register(`sw.js?v=${VERSION}`).then((reg) => {
+    // 새 배포가 준비되면 **조용히 갈아치우지 않고 알린다.**
+    // 작업 중에 화면이 새로고침되면 되돌리기 기록이 날아간다(§7).
+    reg.addEventListener('updatefound', () => {
+      const sw = reg.installing;
+      if (!sw) return;
+      sw.addEventListener('statechange', () => {
+        if (sw.state !== 'installed' || !navigator.serviceWorker.controller) return;
+        notice({
+          id: 'update', kind: 'good', dismissable: true,
+          text: '새 버전이 준비됐습니다. 지금 하던 작업을 내보낸 다음 새로고침하세요.',
+          actions: [{ label: '새로고침', primary: true, onClick: () => location.reload() }],
+        });
+      });
+    });
+  }).catch(() => { /* 오프라인이 안 돼도 앱은 그대로 돈다 */ });
 }
 
 /**
@@ -177,6 +209,7 @@ function renderChrome() {
 
   renderUnknownRoles();
   renderTempRoles();
+  renderAmbiguous();
   renderLegend();
 
   // 사파리는 오래 안 쓴 사이트의 저장분을 지우는 경우가 있다(약 7일).
@@ -345,11 +378,7 @@ function wireToolbar() {
   $('btn-collapse-list').addEventListener('click', () => collapse('list'));
   $('btn-copy-lines').addEventListener('click', copyRelationLines);
 
-  window.addEventListener('keydown', (e) => {
-    if (!(e.metaKey || e.ctrlKey)) return;
-    if (e.key === 'z' && !e.shiftKey && e.target !== $('src')) { e.preventDefault(); flushText(); undo(); }
-    if ((e.key === 'z' && e.shiftKey) || e.key === 'y') { e.preventDefault(); flushText(); redo(); }
-  });
+  wireKeys();
 
   // 손이 멎기 전 마지막 글자를 잃지 않게
   window.addEventListener('pagehide', () => { flushText(); flushSave(); });
@@ -698,6 +727,168 @@ function renderLegend() {
   hint.className = 'hint';
   hint.textContent = '줄을 누르면 그 계열의 선이 숨습니다. 노드는 그대로 있습니다.';
   box.appendChild(hint);
+}
+
+// ─────────────────────────────────────────── 단축키 (5단계)
+
+const TYPING = new Set(['INPUT', 'TEXTAREA']);
+
+/**
+ * 텍스트 칸 안에서는 조합키만 받는다 — 한글을 치는 중에 `/` 가 검색으로 튀면
+ * 그건 단축키가 아니라 사고다.
+ */
+function wireKeys() {
+  window.addEventListener('keydown', (e) => {
+    const typing = TYPING.has(e.target?.tagName);
+    const mod = e.metaKey || e.ctrlKey;
+
+    if (e.key === 'Escape') { onEscape(); return; }
+
+    if (mod) {
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) {
+        // 텍스트 칸 안에서는 브라우저 기본 되돌리기가 더 자연스럽다
+        if (typing) return;
+        e.preventDefault(); flushText(); undo(); return;
+      }
+      if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); flushText(); redo(); return; }
+      if (k === 's') { e.preventDefault(); canSaveInPlace() ? doSaveInPlace() : doExport(); return; }
+      if (k === 'f') { e.preventDefault(); focusSearch(); return; }
+      return;
+    }
+
+    if (typing) return;
+    if (e.key === '/') { e.preventDefault(); focusSearch(); }
+    if (e.key === '?') { e.preventDefault(); showKeys(); }
+  });
+}
+
+/** Esc 는 가장 안쪽부터 하나씩 벗긴다 — 창 → 검색 → 연결 모드 → 선택. */
+function onEscape() {
+  const back = $('modal-back');
+  if (back.classList.contains('open')) {
+    const b = [...back.querySelectorAll('.foot button')]
+      .find((x) => ['취소', '닫기', '그만두기'].includes(x.textContent));
+    b?.click();
+    return;
+  }
+  const search = $('search');
+  if (search.value) { search.value = ''; setQuery(''); search.blur(); return; }
+  if (isConnectMode()) { setConnectMode(false); return; }
+  if (state.ui.focusId) select(null);
+}
+
+function focusSearch() {
+  const s = $('search');
+  s.focus();
+  s.select();
+}
+
+function showKeys() {
+  alertBox({
+    title: '단축키',
+    message: [
+      'Esc      창 닫기 → 검색 지우기 → 연결 모드 끄기 → 선택 풀기',
+      '/        인물 찾기',
+      'Ctrl+F   인물 찾기',
+      'Ctrl+S   저장 (없으면 데이터 내보내기)',
+      'Ctrl+Z   되돌리기   ·   Ctrl+Shift+Z  다시',
+      '?        이 목록',
+      '',
+      '텍스트 칸 안에서는 Ctrl 조합만 듣습니다 — 한글을 치는 중에 튀지 않게.',
+    ].join('\n'),
+  });
+}
+
+// ─────────────────────────────────────────── 파서 모호성 해결 (5단계)
+
+/**
+ * §6 은 「여러 개가 맞으면 어느 쪽인지 묻는다」고 정했다. 1단계에서는 표시만 하고
+ * 앞엣것으로 읽어뒀는데, 여기가 그 「묻는」 자리다.
+ *
+ * 고른 결과는 **그 줄 하나만** 따옴표를 붙여 갈아끼운다(§4).
+ * 한 번 감싸두면 영원히 안 헷갈린다(§6-4).
+ */
+async function resolveAmbiguous() {
+  const items = [];
+  for (const e of parsed().entries) {
+    if (e.kind !== 'relation' || !e.ok) continue;
+    const d = e.diagnostics.find((x) => x.code === 'ambiguous-names' && x.options);
+    if (d) items.push({ entry: e, options: d.options });
+  }
+  if (!items.length) return;
+
+  for (const { entry, options } of items) {
+    const picked = await pickSplit(entry, options);
+    if (picked === null) return;                  // 그만두기
+    if (picked === 'skip') continue;
+    const [a, b] = picked;
+    const line = serializeRelation({ nameA: a, nameB: b, roleA: entry.roleA, roleB: entry.roleB });
+    mutate(`모호성 해결 — ${a}-${b}`, (s) => { s.lines = replaceLine(s.lines, entry.lineIndex, line); });
+  }
+}
+
+function pickSplit(entry, options) {
+  return new Promise((resolve) => {
+    const back = $('modal-back');
+    back.textContent = '';
+    const m = document.createElement('div');
+    m.className = 'modal';
+    m.innerHTML = '<h2>이 줄은 두 가지로 읽힙니다</h2>';
+
+    const body = document.createElement('div');
+    body.className = 'body';
+    const pre = document.createElement('div');
+    pre.className = 'lines';
+    pre.textContent = entry.raw;
+    body.append(
+      Object.assign(document.createElement('p'), { textContent: '어느 쪽이 맞습니까? 고르면 그 줄에만 따옴표를 붙여 확정합니다.' }),
+      pre,
+    );
+
+    for (const [a, b] of options) {
+      const btn = document.createElement('button');
+      btn.style.cssText = 'display:block;width:100%;text-align:left;margin:3px 0;font-family:var(--mono);font-size:11.5px';
+      btn.textContent = serializeRelation({ nameA: a, nameB: b, roleA: entry.roleA, roleB: entry.roleB });
+      btn.addEventListener('click', () => { close(); resolve([a, b]); });
+      body.append(btn);
+    }
+
+    const foot = document.createElement('div');
+    foot.className = 'foot';
+    const skip = document.createElement('button');
+    skip.textContent = '이 줄은 건너뛰기';
+    skip.addEventListener('click', () => { close(); resolve('skip'); });
+    const cancel = document.createElement('button');
+    cancel.textContent = '그만두기';
+    cancel.addEventListener('click', () => { close(); resolve(null); });
+    foot.append(skip, cancel);
+
+    m.append(body, foot);
+    back.append(m);
+    back.classList.add('open');
+
+    function close() { back.classList.remove('open'); back.textContent = ''; }
+  });
+}
+
+function renderAmbiguous() {
+  const host = $('notices');
+  const n = parsed().entries.filter(
+    (e) => e.kind === 'relation' && e.diagnostics.some((d) => d.code === 'ambiguous-names'),
+  ).length;
+  const old = host.querySelector('[data-nid="ambig"]');
+  if (!n) { old?.remove(); return; }
+
+  const text = `두 가지로 읽히는 줄이 ${n}개 있습니다. 앞엣것으로 읽는 중입니다.`;
+  if (old && old.dataset.sig === text) return;
+  old?.remove();
+  const el = notice({
+    id: 'ambig', kind: 'warn', text,
+    actions: [{ label: '어느 쪽인지 정하기', keep: true, onClick: resolveAmbiguous }],
+    dismissable: true,
+  });
+  el.dataset.sig = text;
 }
 
 /** 인물 찾기 — 초성도 받는다. Enter 면 첫 번째를 골라 화면 가운데로. */

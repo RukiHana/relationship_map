@@ -199,9 +199,12 @@ function splitPair(s, accept) {
   return { cuts, hits };
 }
 
-/** 진단 한 건. level 은 화면의 줄 클래스가 된다(.err / .warn). */
-function diag(level, code, message) {
-  return { level, code, message };
+/**
+ * 진단 한 건. level 은 화면의 줄 클래스가 된다(.err / .warn).
+ * `extra` 에는 UI 가 쓸 구조를 담는다 — 모호성 해결 창이 후보 목록을 여기서 읽는다.
+ */
+function diag(level, code, message, extra = null) {
+  return extra ? { level, code, message, ...extra } : { level, code, message };
 }
 
 /**
@@ -250,9 +253,11 @@ export function parseRelationLine(raw, ctx, lineIndex = 0) {
     const [l, r] = nameSplit.hits[0];
     nameA = norm(unquote(l));
     nameB = norm(unquote(r));
-    const opts = nameSplit.hits.map(([a, b]) => `${norm(unquote(a))} / ${norm(unquote(b))}`).join('  ·  ');
+    const options = nameSplit.hits.map(([a, b]) => [norm(unquote(a)), norm(unquote(b))]);
     entry.diagnostics.push(diag('warn', 'ambiguous-names',
-      `이름을 가르는 방법이 ${nameSplit.hits.length}가지입니다 — ${opts}. 앞엣것으로 읽었습니다. 이름을 따옴표로 감싸면 확정됩니다`));
+      `이름을 가르는 방법이 ${options.length}가지입니다 — ${options.map((o) => o.join(' / ')).join('  ·  ')}.`
+      + ' 앞엣것으로 읽었습니다. 이름을 따옴표로 감싸면 확정됩니다',
+      { options }));
   } else if (nameSplit.cuts.length === 1) {
     // 아무것도 안 맞고 `-` 가 하나뿐 → 새 캐릭터로 본다. 인물을 쭉 적어 내려갈 때의 정상 경로다
     const i = nameSplit.cuts[0];

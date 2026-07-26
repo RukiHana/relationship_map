@@ -757,6 +757,61 @@ button.primary { font-weight: 700; }
 .checklist code { font-family: var(--mono); font-size: 11.5px; }
 .checklist .cat { color: var(--ink-dim); font-size: 11px; }
 
+/* ─────────────────────────────────────────── 인쇄 (5단계)
+ *
+ * 도구는 전부 빼고 **관계도와 관계 목록만** 남긴다.
+ * 관계도는 화면 좌표계를 그대로 인쇄하므로 보이는 만큼만 나온다 —
+ * 전체를 그림으로 받고 싶으면 `SVG` 단추를 쓰는 게 맞다(§7).
+ */
+
+@media print {
+  @page { margin: 14mm; }
+
+  html, body { height: auto; background: #fff; }
+  #app { height: auto; display: block; }
+
+  #topbar, #notices, #statusbar, #divider,
+  #graph-tools, #legend, #card, #edge-pick, #list-tools, #modal-back { display: none !important; }
+
+  #split { display: block; }
+
+  #graph-pane {
+    flex: none;
+    position: relative;
+    height: 130mm;
+    page-break-after: avoid;
+    border: 1px solid #dfe2e7;
+    border-radius: 4px;
+  }
+  .graph { background: #fff; }
+  /* 인쇄할 때는 흐리기를 풀어 전부 또렷하게 */
+  .graph.focused .node,
+  .graph.searching .node { opacity: 1 !important; }
+
+  #list-pane {
+    flex: none;
+    position: static;
+    background: #fff;
+    overflow: visible;
+    height: auto;
+    margin-top: 6mm;
+  }
+  #text-wrap { position: static; height: auto; }
+
+  /* 2층 중 배경 층은 인쇄에서 의미가 없다. 글자는 textarea 가 갖고 있다 */
+  #hl { display: none; }
+  #src {
+    position: static;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    color: #000;
+    -webkit-text-fill-color: #000;
+    overflow: visible;
+    white-space: pre-wrap;
+  }
+}
+
 /* ─────────────────────────────────────────── 좁은 화면 */
 
 @media (max-width: 560px) {

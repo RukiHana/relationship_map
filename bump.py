@@ -23,6 +23,8 @@ VERSION_FILE = ROOT / "src" / "version.js"
 
 # ?v= 를 실어 나르는 파일들. tests/ 는 캐시를 안 타므로 뺀다.
 TARGETS = ["index.html", "src/*.js"]
+# sw.js 는 `?v=` 를 안 쓴다 — 버전을 **등록 주소에서 읽는다**(main.js 의 register 한 줄).
+# 그 한 줄이 src/main.js 안에 있으므로 위 목록으로 이미 덮인다.
 
 QUERY_RE = re.compile(r"(\?v=)([0-9a-zA-Z._-]+)")
 CONST_RE = re.compile(r"(export const VERSION = ')([^']*)(';)")

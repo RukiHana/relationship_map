@@ -11,9 +11,9 @@
 //   · `pair` 로 반대쪽을 자동 제안한다. **강제가 아니라 제안**이라 틀려도 손해가 없다
 //   · 그룹 계열(`groupOnly`)은 흐리게 두고, 고르면 v1 에서 어떻게 되는지 알린다
 
-import { vocabulary, adjacency, byId } from './state.js?v=20260726e';
-import { groupByCategory, suggestPair } from './roles.js?v=20260726e';
-import { norm, matchesQuery } from './parse.js?v=20260726e';
+import { vocabulary, adjacency, byId } from './state.js?v=20260726f';
+import { groupByCategory, suggestPair } from './roles.js?v=20260726f';
+import { norm, matchesQuery } from './parse.js?v=20260726f';
 
 const OPEN_TIER = 1;   // 항상 열려 있는 층위
 

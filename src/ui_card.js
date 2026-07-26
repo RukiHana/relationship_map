@@ -8,7 +8,7 @@
 // **선 클릭 판정이 완벽하지 않아도 되는 이유가 이 카드다.** 없으면 정확도에
 // 목을 매야 하는데, 있으면 최선을 다하고 실패해도 그만이다.
 
-import { state, adjacency, subscribe, byId } from './state.js?v=20260726e';
+import { state, adjacency, subscribe, byId } from './state.js?v=20260726f';
 
 let box, hooks = {};
 
