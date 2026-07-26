@@ -4,35 +4,35 @@
 // 조용한 복원은 하지 않는다 — 그 상태에서 파일을 가져오면 「아까 그건 어디 갔지」가
 // 된다(계획서 §8).
 
-import { VERSION } from './version.js?v=20260726f';
+import { VERSION } from './version.js?v=20260726j';
 import {
   state, subscribe, hydrate, mutate, touchUI, undo, redo, canUndo, canRedo,
   dirtyCount, markExported, parsed, vocabulary, setSaver, flushSave, byId,
-} from './state.js?v=20260726f';
+} from './state.js?v=20260726j';
 import {
   addCharacter, previewRename, applyRename, previewDelete, applyDelete,
   loadBundle, addSessionRole, tidyLayout,
   appendRelationLine, replaceRelationLine, deleteRelationLine,
-} from './model.js?v=20260726f';
-import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726f';
-import { serializeRelation, replaceLine } from './serialize.js?v=20260726f';
-import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726f';
+} from './model.js?v=20260726j';
+import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726j';
+import { serializeRelation, replaceLine } from './serialize.js?v=20260726j';
+import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726j';
 import {
   initGraph, select, toggleShowAll, setHotRelation, fitToView,
   setConnectMode, isConnectMode,
   setHiddenCategories, hiddenCategories, setQuery, centerOn, buildSVG,
-} from './ui_graph.js?v=20260726f';
-import { pickRoles } from './ui_roles.js?v=20260726f';
-import { openSheet, characterJSON } from './ui_sheet.js?v=20260726f';
-import { initCard } from './ui_card.js?v=20260726f';
+} from './ui_graph.js?v=20260726j';
+import { pickRoles } from './ui_roles.js?v=20260726j';
+import { openSheet, characterJSON } from './ui_sheet.js?v=20260726j';
+import { initCard } from './ui_card.js?v=20260726j';
 import {
   initIO, saveWork, loadWork, clearWork, storageWorks, pushSnapshot,
   setOtherTabHandler, exportBundle, copyText, readFile, prepareImport, describeCompare,
   canSaveInPlace, saveInPlace, savedFileName,
-} from './io.js?v=20260726f';
+} from './io.js?v=20260726j';
 import {
   confirmBox, alertBox, promptBox, pasteBox, selectableBox, checkListBox, notice,
-} from './ui_dialog.js?v=20260726f';
+} from './ui_dialog.js?v=20260726j';
 
 const $ = (id) => document.getElementById(id);
 
@@ -638,18 +638,39 @@ function collapse(which) {
   flushSave();
 }
 
+// **완전히 숨기지 않는다. 접힌 쪽도 손잡이는 남아서 되돌릴 방법이 늘 보인다**(§7).
+// 그래서 0 이 아니라 도구 줄 높이만큼 남긴다.
+const GRAPH_STUB = 46;
+const LIST_STUB = 34;
+
+/**
+ * ⚠ **인라인 flex 를 반드시 같이 고쳐야 한다.** 클래스만 토글하면 앞서 넣어둔
+ *   인라인 `flex: 35 1 0%` 가 이겨서 **접기가 아무 일도 안 한다** —
+ *   접기 버튼도 분할선 끝까지 밀기도 둘 다 안 먹었다. 실제로 그랬다.
+ */
 function applyRatio() {
   const g = $('graph-pane'), l = $('list-pane');
   const c = state.ui.collapsed;
   g.classList.toggle('collapsed', c === 'graph');
   l.classList.toggle('collapsed', c === 'list');
-  if (c) return;
-  const r = Math.max(8, Math.min(92, state.ui.ratio || 65));
-  // 완전히 숨기지는 않는다. 접힌 쪽도 손잡이는 남아서 되돌릴 방법이 늘 보인다(§7)
-  g.style.flex = `${r} 1 0%`;
-  l.style.flex = `${100 - r} 1 0%`;
-  $('btn-collapse-graph').textContent = '▲';
-  $('btn-collapse-list').textContent = '▼';
+
+  if (c === 'graph') {
+    g.style.flex = `0 0 ${GRAPH_STUB}px`;
+    l.style.flex = '1 1 auto';
+  } else if (c === 'list') {
+    g.style.flex = '1 1 auto';
+    l.style.flex = `0 0 ${LIST_STUB}px`;
+  } else {
+    const r = Math.max(8, Math.min(92, state.ui.ratio || 65));
+    g.style.flex = `${r} 1 0%`;
+    l.style.flex = `${100 - r} 1 0%`;
+  }
+
+  const gb = $('btn-collapse-graph'), lb = $('btn-collapse-list');
+  gb.textContent = c === 'graph' ? '▼' : '▲';
+  gb.title = c === 'graph' ? '관계도 펼치기' : '관계도 접기';
+  lb.textContent = c === 'list' ? '▲' : '▼';
+  lb.title = c === 'list' ? '목록 펼치기' : '목록 접기';
 }
 
 // ─────────────────────────────────────────── 4단계
@@ -659,11 +680,27 @@ function applyRatio() {
  * 놓은 자리를 계속 밀어내서 싸움이 된다. 마음에 안 들면 되돌리기 한 번이다.
  */
 function doTidy() {
-  const r = tidyLayout();
+  // **보이는 크기를 넘겨준다.** 안 주면 화면보다 넓게 퍼지고 `맞춤` 이 배율을
+  // 0.4 근처까지 줄여서 글자를 못 읽게 만든다(§7-1 의 30명 밀도 문제)
+  const g = document.getElementById('graph').getBoundingClientRect();
+  const r = tidyLayout({ width: g.width, height: g.height });
   if (!r?.ok) return;
   fitToView();
-  notice({ id: 'tidy', kind: '', text: `${r.moved}명을 다시 놓았습니다. 마음에 안 들면 되돌리기(↶) 한 번이면 원래 자리로 갑니다.` });
-  setTimeout(() => document.querySelector('[data-nid="tidy"]')?.remove(), 6000);
+
+  if (r.fitted) {
+    notice({ id: 'tidy', kind: '', text: `${r.moved}명을 다시 놓았습니다. 마음에 안 들면 되돌리기(↶) 한 번이면 원래 자리로 갑니다.` });
+    setTimeout(() => document.querySelector('[data-nid="tidy"]')?.remove(), 6000);
+    return;
+  }
+  // 관계도가 좁으면 30명이 다 안 들어간다. **아래 목록을 접는 게 실제 해법이다** —
+  // 65:35 를 100:0 으로 바꾸면 관계도 높이가 1.7배가 된다
+  notice({
+    id: 'tidy', kind: 'warn',
+    text: `${r.moved}명을 다시 놓았지만 관계도가 좁아 몇 명은 가까이 붙었습니다.`,
+    actions: [
+      { label: '목록 접고 다시 정리', primary: true, onClick: () => { collapse('list'); setTimeout(doTidy, 60); } },
+    ],
+  });
 }
 
 /** 계열 범례 — 줄을 누르면 그 계열의 **선만** 감춘다. 노드는 그대로 둔다. */

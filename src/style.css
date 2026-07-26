@@ -147,7 +147,12 @@ button.primary { font-weight: 700; }
 #graph-pane { flex: 65 1 0%; position: relative; min-height: 0; overflow: hidden; }
 #list-pane  { flex: 35 1 0%; position: relative; min-height: 0; overflow: hidden; background: var(--list-bg); }
 
-#graph-pane.collapsed, #list-pane.collapsed { flex: 0 0 0%; }
+/* 접혀도 **손잡이는 남긴다**(§7). 0 으로 만들면 되돌릴 단추까지 같이 사라진다.
+   실제 높이는 main.js 의 applyRatio 가 인라인으로 넣는다 — 인라인이 이기기 때문이다 */
+#graph-pane.collapsed .graph > *:not(#graph-tools) { display: none; }
+#graph-pane.collapsed #graph-tools { bottom: 8px; }
+#list-pane.collapsed #text-wrap { visibility: hidden; }
+#list-pane.collapsed #list-tools { bottom: 5px; }
 
 /* 분할선 — 보이는 건 9px, **집는 건 24px 이상**.
    9px 를 손가락으로 못 집는다(§7-1). 선 클릭에서 쓰는 것과 같은 수법이다. */

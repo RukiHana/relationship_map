@@ -2,12 +2,12 @@
 //
 // 상태를 바꾸는 건 전부 state.mutate() 를 지난다.
 
-import { state, mutate, parsed, byName as findByName, byId as findById } from './state.js?v=20260726f';
-import { norm, parseDocument, makeContext } from './parse.js?v=20260726f';
-import { mergeRoles } from './roles.js?v=20260726f';
+import { state, mutate, parsed, byName as findByName, byId as findById } from './state.js?v=20260726j';
+import { norm, parseDocument, makeContext } from './parse.js?v=20260726j';
+import { mergeRoles } from './roles.js?v=20260726j';
 import {
   findLinesWithName, removeLines, renameInLines, replaceLine, serializeRelation,
-} from './serialize.js?v=20260726f';
+} from './serialize.js?v=20260726j';
 
 // ─────────────────────────────────────────── id — 영구 결번(§4)
 
@@ -214,8 +214,12 @@ export function groupNames() {
 const TIDY_STEPS = 260;
 const LINK_LEN = 165;        // 이어진 사람끼리 목표 거리
 const MIN_GAP = 92;          // 안 이어진 사람끼리 최소 거리 — 30명 밀도 문제(§7-1)
+const SAFE_GAP = 86;         // 노드 상자가 안 밟히는 중심 간 최소 거리 (세 글자 이름 ≈ 70px)
 
-export function tidyLayout() {
+/**
+ * @param {?{width:number,height:number}} view 관계도의 보이는 크기. 주면 결과를 거기에 맞춘다.
+ */
+export function tidyLayout(view = null) {
   const chars = state.characters.filter((c) => Array.isArray(c.pos));
   if (chars.length < 2) return { ok: false, error: '옮길 인물이 없습니다' };
 
@@ -235,8 +239,31 @@ export function tidyLayout() {
     links.push([a, b]);
   }
 
-  const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length;
-  const cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+  // ── **화면을 경계로 삼는다**(§7-1 의 30명 밀도 문제)
+  //
+  // 끝난 뒤에 통째로 줄이는 방법을 먼저 써봤는데 안 됐다. 힘 기반 배치는
+  // 「제일 가까운 두 점」이 전체 폭에 비해 훨씬 촘촘해서, 상자가 안 밟히게
+  // 하려는 바닥값이 오히려 배치를 **넓혀** 버렸다.
+  //
+  // 그래서 **간격을 화면에서 거꾸로 계산하고, 매 걸음 화면 안으로 가둔다.**
+  // 30명이 아이패드 가로(관계도 약 1024×390)에 들어가려면 간격이 92 가 아니라
+  // 그 화면이 허락하는 만큼이어야 한다.
+  const pad = 56;
+  const box = view && view.width > 200 && view.height > 160
+    ? { w: view.width, h: view.height }
+    : null;
+
+  let gap = MIN_GAP;
+  let link = LINK_LEN;
+  if (box) {
+    const area = Math.max(1, (box.w - pad * 2) * (box.h - pad * 2));
+    // 한 사람이 쓸 수 있는 넓이의 제곱근이 곧 쓸 수 있는 간격이다
+    gap = Math.max(SAFE_GAP, Math.min(MIN_GAP, Math.sqrt(area / pts.length) * 0.86));
+    link = Math.max(gap * 1.3, Math.min(LINK_LEN, gap * 1.8));
+  }
+
+  const cx = box ? box.w / 2 : pts.reduce((s, p) => s + p[0], 0) / pts.length;
+  const cy = box ? box.h / 2 : pts.reduce((s, p) => s + p[1], 0) / pts.length;
 
   for (let step = 0; step < TIDY_STEPS; step++) {
     const cool = 1 - step / TIDY_STEPS;          // 식으면서 멈춘다
@@ -250,8 +277,8 @@ export function tidyLayout() {
         let dy = (pts[i][1] - pts[j][1]) * 1.6;   // 세로를 더 아끼면 가로로 퍼진다
         let d = Math.hypot(dx, dy);
         if (d < 0.01) { dx = (i % 2 ? 1 : -1) * 0.7; dy = 0.7; d = 1; }
-        if (d > MIN_GAP * 3) continue;
-        const f = (MIN_GAP * MIN_GAP) / (d * d) * 2.4;
+        if (d > gap * 3) continue;
+        const f = (gap * gap) / (d * d) * 2.4;
         fx[i] += (dx / d) * f; fy[i] += (dy / d) * f;
         fx[j] -= (dx / d) * f; fy[j] -= (dy / d) * f;
       }
@@ -262,27 +289,46 @@ export function tidyLayout() {
       const dx = pts[b][0] - pts[a][0];
       const dy = pts[b][1] - pts[a][1];
       const d = Math.hypot(dx, dy) || 1;
-      const f = (d - LINK_LEN) * 0.045;
+      const f = (d - link) * 0.045;
       fx[a] += (dx / d) * f; fy[a] += (dy / d) * f;
       fx[b] -= (dx / d) * f; fy[b] -= (dy / d) * f;
     }
 
-    // 아무하고도 안 엮인 사람이 무한히 날아가지 않게 가운데로 살짝
     for (let i = 0; i < pts.length; i++) {
+      // 아무하고도 안 엮인 사람이 무한히 날아가지 않게 가운데로 살짝
       fx[i] += (cx - pts[i][0]) * 0.006;
       fy[i] += (cy - pts[i][1]) * 0.006;
       const cap = 22 * cool;
       pts[i][0] += Math.max(-cap, Math.min(cap, fx[i]));
       pts[i][1] += Math.max(-cap, Math.min(cap, fy[i]));
+
+      // **매 걸음 화면 안으로 가둔다.** 끝나고 한 번 줄이는 것과 결과가 다르다 —
+      // 가두면 그 안에서 다시 밀려나 고르게 퍼지고, 줄이면 촘촘한 데가 그대로 촘촘하다
+      if (box) {
+        pts[i][0] = Math.max(pad, Math.min(box.w - pad, pts[i][0]));
+        pts[i][1] = Math.max(pad, Math.min(box.h - pad, pts[i][1]));
+      }
     }
   }
+
+  // 화면이 정말 좁아 간격을 SAFE_GAP 까지 줄여도 안 되는 경우가 있다.
+  // 그때는 「들어갔다」고 말하지 않는다 — 부르는 쪽이 사용자에게 알린다.
+  //
+  // ⚠ 넓이만 비교하면 안 된다. 힘 기반 배치는 격자처럼 빈틈없이 안 채워서
+  //   **여유가 1.4배쯤 있어야 실제로 안 밟힌다.** 30명 · 아이패드 가로(관계도
+  //   1024×391)에서 넓이만 보면 「들어간다」가 나오는데 실제로는 한 쌍이 겹쳤다.
+  // 1.4 는 너무 짰다 — 아이패드 세로 기본(768×557)은 실제로 하나도 안 겹치는데
+  // 경고가 떴다. 1.25 로 하면 겹치는 화면(가로 기본 1024×391)만 정확히 걸린다.
+  const PACKING = 1.25;
+  const usable = box ? (box.w - pad * 2) * (box.h - pad * 2) : Infinity;
+  const fitted = !box || pts.length * gap * gap * PACKING <= usable;
 
   return mutate('정리', (s) => {
     for (const c of s.characters) {
       const i = idx.get(c.id);
       if (i !== undefined) c.pos = [Math.round(pts[i][0]), Math.round(pts[i][1])];
     }
-    return { ok: true, moved: chars.length };
+    return { ok: true, moved: chars.length, fitted };
   });
 }
 

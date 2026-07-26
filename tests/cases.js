@@ -9,6 +9,7 @@
 
 import {
   makeContext, parseDocument, parseRelationLine, resolveRole, normalizeLine, nfc,
+  matchesQuery, chosung,
 } from '../src/parse.js';
 import {
   serializeRelation, serializeRole, quoteName, needsQuote,
@@ -501,5 +502,78 @@ export const tests = [
 
   ['내보내기 파일명에 날짜와 시각이 박힌다(§8)', (t) => {
     t.eq(bundleFileName(new Date(2026, 6, 26, 18, 40)), 'charmap-20260726-1840.json');
+  }],
+
+  // ─── 검색 (4단계). 인물 찾기와 역할 선택창이 같은 함수를 쓴다
+
+  ['초성 뽑기', (t) => {
+    t.eq(chosung('지나'), 'ㅈㄴ');
+    t.eq(chosung('시어머니'), 'ㅅㅇㅁㄴ');
+    t.eq(chosung('절교한 친구'), 'ㅈㄱㅎ ㅊㄱ');
+    t.eq(chosung('abc 123'), 'abc 123', '한글이 아니면 그대로 둔다');
+    t.eq(chosung(''), '');
+  }],
+
+  ['검색 — 빈 질의는 전부 통과', (t) => {
+    t.eq(matchesQuery('지나', ''), true);
+    t.eq(matchesQuery('지나', '   '), true);
+  }],
+
+  ['검색 — 부분 문자열이 기본', (t) => {
+    t.eq(matchesQuery('시어머니', '어머'), true);
+    t.eq(matchesQuery('엄마', '엄'), true);
+    t.eq(matchesQuery('절교한 친구', '친구'), true);
+    t.eq(matchesQuery('엄마', '아빠'), false);
+  }],
+
+  ['검색 — 질의가 전부 초성이면 초성으로 맞춘다', (t) => {
+    t.eq(matchesQuery('지나', 'ㅈㄴ'), true);
+    t.eq(matchesQuery('시어머니', 'ㅅㅇㅁㄴ'), true);
+    t.eq(matchesQuery('시어머니', 'ㅇㅁ'), true, '가운데 초성도 걸린다');
+    t.eq(matchesQuery('지나', 'ㄷㅇ'), false);
+  }],
+
+  ['검색 — 초성과 글자를 섞으면 초성 규칙을 안 쓴다', (t) => {
+    // `ㅈ나` 는 초성 전용이 아니므로 부분 문자열로만 본다 — 그게 맞다.
+    // 섞인 질의까지 받으면 한글 조합 중간 상태(`ㅈ` 만 친 순간)가 엉뚱하게 걸린다
+    t.eq(matchesQuery('지나', 'ㅈ나'), false);
+  }],
+
+  ['검색 — NFC 정규화를 거친다', (t) => {
+    t.eq(matchesQuery('지나'.normalize('NFD'), '지나'), true);
+    t.eq(matchesQuery('지나', '지나'.normalize('NFD')), true);
+  }],
+
+  ['§7 의 예시 중 시어머니는 「엄」으로 안 걸린다 — 알고 있는 한계다', (t) => {
+    // 그 글자에 「엄」이 없다. 같은 뜻 다른 말은 검색이 아니라 aliases 가 맡는다.
+    // 이 케이스는 「고쳐야 할 버그」가 아니라 **정해둔 동작**이라 테스트로 못 박는다
+    t.eq(matchesQuery('시어머니', '엄'), false);
+    t.eq(matchesQuery('엄마', '엄'), true);
+  }],
+
+  // ─── 모호성 해결 창이 읽는 구조 (5단계)
+
+  ['이름 모호성 진단에 후보가 구조로 실린다', (t) => {
+    const p = parseDocument(['가-나-다 : 친구 - 친구'], ctxOf(['가', '나-다', '가-나', '다']));
+    const d = p.entries[0].diagnostics.find((x) => x.code === 'ambiguous-names');
+    t.ok(!!d, '진단이 있어야 한다');
+    t.deep(d.options, [['가', '나-다'], ['가-나', '다']], '두 후보가 순서대로 실려야 한다');
+    t.eq(p.entries[0].nameA, '가', '앞엣것으로 읽어둔다');
+  }],
+
+  ['모호성을 따옴표로 확정하면 진단이 사라진다', (t) => {
+    const ctx = ctxOf(['가', '나-다', '가-나', '다']);
+    const before = parseDocument(['가-나-다 : 친구 - 친구'], ctx);
+    const d = before.entries[0].diagnostics.find((x) => x.code === 'ambiguous-names');
+
+    // 두 번째 후보(가-나 / 다)로 확정한다 — 창이 하는 일과 같다
+    const [a, b] = d.options[1];
+    const line = serializeRelation({ nameA: a, nameB: b, roleA: before.entries[0].roleA, roleB: before.entries[0].roleB });
+    t.eq(line, '"가-나"-다 : 친구 - 친구');
+
+    const after = parseDocument([line], ctx);
+    t.eq(after.relations[0].nameA, '가-나');
+    t.eq(after.relations[0].nameB, '다');
+    t.deep(codes(after.entries[0]), [], '확정했으므로 표시가 없어야 한다');
   }],
 ];

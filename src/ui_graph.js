@@ -11,10 +11,10 @@
 // 아이패드에는 1단계가 없다 — 터치에 호버가 없어서 탭하면 곧바로 2단계로 간다.
 // **길게 누르기는 쓰지 않는다.** 브라우저 자체 메뉴와 충돌한다.
 
-import { state, parsed, adjacency, vocabulary, touchUI, subscribe, byId } from './state.js?v=20260726f';
-import { moveCharacter, groupColor } from './model.js?v=20260726f';
-import { colorOf, styleOf } from './roles.js?v=20260726f';
-import { matchesQuery } from './parse.js?v=20260726f';
+import { state, parsed, adjacency, vocabulary, touchUI, subscribe, byId } from './state.js?v=20260726j';
+import { moveCharacter, groupColor } from './model.js?v=20260726j';
+import { colorOf, styleOf } from './roles.js?v=20260726j';
+import { matchesQuery } from './parse.js?v=20260726j';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
