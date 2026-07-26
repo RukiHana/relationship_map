@@ -8,7 +8,7 @@
 // **선 클릭 판정이 완벽하지 않아도 되는 이유가 이 카드다.** 없으면 정확도에
 // 목을 매야 하는데, 있으면 최선을 다하고 실패해도 그만이다.
 
-import { state, adjacency, subscribe, byId } from './state.js?v=20260726b';
+import { state, adjacency, subscribe, byId } from './state.js?v=20260726c';
 
 let box, hooks = {};
 
@@ -49,13 +49,17 @@ function render() {
   // 이름 변경·삭제는 둘 다 미리보기와 확인을 거친다(§4).
   const acts = document.createElement('div');
   acts.className = 'card-acts';
+  const sheet = document.createElement('button');
+  sheet.textContent = '시트';
+  sheet.title = '소속·색·항목·메모';
+  sheet.addEventListener('click', () => hooks.onSheet?.(id));
   const rename = document.createElement('button');
   rename.textContent = '이름 변경';
   rename.addEventListener('click', () => hooks.onRename?.(id));
   const del = document.createElement('button');
   del.textContent = '삭제';
   del.addEventListener('click', () => hooks.onDelete?.(id));
-  acts.append(rename, del);
+  acts.append(sheet, rename, del);
   box.appendChild(acts);
 
   if (!rels.length) {

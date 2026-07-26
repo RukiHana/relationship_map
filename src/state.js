@@ -3,8 +3,8 @@
 // **상태를 바꾸는 모든 자리가 mutate() 를 지난다**(계획서 §10).
 // 되돌리기를 나중에 얹으면 그때 코드를 전부 다시 훑어야 하므로 1단계에 넣는다.
 
-import { makeContext, parseDocument } from './parse.js?v=20260726b';
-import { mergeRoles } from './roles.js?v=20260726b';
+import { makeContext, parseDocument } from './parse.js?v=20260726c';
+import { mergeRoles } from './roles.js?v=20260726c';
 
 const UNDO_CAP = 50;
 const COALESCE_MS = 1500;     // 연달아 들어오는 같은 종류의 편집은 한 덩어리로 본다

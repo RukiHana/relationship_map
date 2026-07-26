@@ -2,12 +2,12 @@
 //
 // 상태를 바꾸는 건 전부 state.mutate() 를 지난다.
 
-import { state, mutate, parsed, byName as findByName, byId as findById } from './state.js?v=20260726b';
-import { norm, parseDocument, makeContext } from './parse.js?v=20260726b';
-import { mergeRoles } from './roles.js?v=20260726b';
+import { state, mutate, parsed, byName as findByName, byId as findById } from './state.js?v=20260726c';
+import { norm, parseDocument, makeContext } from './parse.js?v=20260726c';
+import { mergeRoles } from './roles.js?v=20260726c';
 import {
   findLinesWithName, removeLines, renameInLines, replaceLine, serializeRelation,
-} from './serialize.js?v=20260726b';
+} from './serialize.js?v=20260726c';
 
 // ─────────────────────────────────────────── id — 영구 결번(§4)
 
@@ -169,6 +169,38 @@ export function setGroup(id, group) {
     const c = s.characters.find((x) => x.id === id);
     if (c) c.group = norm(group) || null;
   });
+}
+
+/**
+ * 시트에서 고친 것을 한 번에 반영한다.
+ * **이름은 여기서 안 받는다** — 이름 변경은 관계 줄을 줄 단위로 갈아끼우는
+ * 별개의 작업이고 미리보기와 확인을 거쳐야 한다(§4). applyRename() 을 쓴다.
+ *
+ * 시트를 한 번 저장하는 게 되돌리기 `1개` 다(§8).
+ */
+export function updateCharacter(id, patch) {
+  const c = findById(id);
+  if (!c) return { ok: false, error: '없는 캐릭터입니다' };
+
+  mutate(`시트 저장 — ${c.name}`, (s) => {
+    const t = s.characters.find((x) => x.id === id);
+    if (!t) return;
+    if ('group' in patch) t.group = norm(patch.group) || null;
+    if ('color' in patch) t.color = patch.color || null;
+    if ('notes' in patch) t.notes = norm(patch.notes);
+    if ('fields' in patch) {
+      // **순서 있는 쌍의 목록이다**(§4). 객체로 바꾸면 순서를 잃는다
+      t.fields = patch.fields
+        .map(([k, v]) => [norm(k), norm(v)])
+        .filter(([k, v]) => k !== '' || v !== '');
+    }
+  });
+  return { ok: true };
+}
+
+/** 지금 쓰이는 소속 목록 — 시트의 자동완성에 쓴다. */
+export function groupNames() {
+  return [...new Set(state.characters.map((c) => c.group).filter(Boolean))].sort();
 }
 
 // ─────────────────────────────────────────── 텍스트 반영

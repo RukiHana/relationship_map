@@ -4,31 +4,32 @@
 // 조용한 복원은 하지 않는다 — 그 상태에서 파일을 가져오면 「아까 그건 어디 갔지」가
 // 된다(계획서 §8).
 
-import { VERSION } from './version.js?v=20260726b';
+import { VERSION } from './version.js?v=20260726c';
 import {
   state, subscribe, hydrate, mutate, touchUI, undo, redo, canUndo, canRedo,
   dirtyCount, markExported, parsed, vocabulary, setSaver, flushSave, byId,
-} from './state.js?v=20260726b';
+} from './state.js?v=20260726c';
 import {
   addCharacter, previewRename, applyRename, previewDelete, applyDelete,
   loadBundle, addSessionRole,
   appendRelationLine, replaceRelationLine, deleteRelationLine,
-} from './model.js?v=20260726b';
-import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726b';
-import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726b';
+} from './model.js?v=20260726c';
+import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726c';
+import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726c';
 import {
   initGraph, select, toggleShowAll, setHotRelation, fitToView,
   setConnectMode, isConnectMode,
-} from './ui_graph.js?v=20260726b';
-import { pickRoles } from './ui_roles.js?v=20260726b';
-import { initCard } from './ui_card.js?v=20260726b';
+} from './ui_graph.js?v=20260726c';
+import { pickRoles } from './ui_roles.js?v=20260726c';
+import { openSheet, characterJSON } from './ui_sheet.js?v=20260726c';
+import { initCard } from './ui_card.js?v=20260726c';
 import {
   initIO, saveWork, loadWork, clearWork, storageWorks, pushSnapshot,
   setOtherTabHandler, exportBundle, copyText, readFile, prepareImport, describeCompare,
-} from './io.js?v=20260726b';
+} from './io.js?v=20260726c';
 import {
   confirmBox, alertBox, promptBox, pasteBox, selectableBox, checkListBox, notice,
-} from './ui_dialog.js?v=20260726b';
+} from './ui_dialog.js?v=20260726c';
 
 const $ = (id) => document.getElementById(id);
 
@@ -69,6 +70,7 @@ async function boot() {
     onPickLine: (i) => focusOnLine(i),
     onRename: doRename,
     onDelete: doDelete,
+    onSheet: doSheet,
     onEditLine: editRelationLine,
     onDeleteLine: removeRelationLine,
   });
@@ -333,6 +335,29 @@ async function doRename(id) {
     if (!ok) return;
   }
   applyRename(id, name);
+}
+
+/**
+ * 캐릭터 시트(3단계) — 소속·색·자유 항목·메모.
+ * **이름은 시트에서 못 바꾼다** — 관계 줄을 갈아끼우는 별개 작업이라 미리보기를
+ * 거쳐야 한다(§4). 시트 안의 「이름 변경…」이 그 흐름으로 넘겨준다.
+ */
+async function doSheet(id) {
+  await openSheet(id, {
+    onRename: doRename,
+    onDelete: doDelete,
+    onCopy: async (cid, patch) => {
+      // 저장 안 한 상태에서도 지금 화면의 값을 그대로 복사한다
+      const text = characterJSON(cid, patch);
+      const how = await copyText(text);
+      if (how === 'manual') {
+        await selectableBox({ title: '이 캐릭터', message: '전체 선택해 뒀습니다.', text });
+      } else {
+        notice({ id: 'copied-char', kind: 'good', text: '캐릭터 JSON 을 클립보드에 담았습니다.' });
+        setTimeout(() => document.querySelector('[data-nid="copied-char"]')?.remove(), 4000);
+      }
+    },
+  });
 }
 
 /** **소리 없이 지우지 않는다**(§4). 사라질 줄을 그대로 나열하고 확인받는다. */

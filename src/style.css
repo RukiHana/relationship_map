@@ -546,6 +546,64 @@ button.primary { font-weight: 700; }
 .modal .foot .left { margin-right: auto; }
 .modal .err { color: #8b3a3a; font-size: 12px; min-height: 17px; }
 
+/* ── 캐릭터 시트 (ui_sheet.js) */
+
+.sheet-modal { width: min(520px, 100%); }
+.sheet-modal .body { display: flex; flex-direction: column; gap: 10px; }
+
+.sheet-row { display: flex; align-items: center; gap: 10px; }
+.sheet-row.block { display: block; }
+.sheet-label { flex: 0 0 44px; font-size: 11.5px; color: var(--ink-dim); font-weight: 700; }
+.sheet-label-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+.sheet-label-row button { font-size: 11px; padding: 3px 8px; min-height: 22px; }
+
+.sheet-name { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; }
+.sheet-name .nm { font-weight: 700; font-size: 13px; }
+.sheet-name button { font-size: 11px; padding: 3px 8px; min-height: 22px; }
+
+.sheet-row > input[type="text"] { flex: 1 1 auto; }
+
+.sheet-swatches { display: flex; gap: 5px; flex-wrap: wrap; }
+.swatch {
+  width: 26px; height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.swatch.auto {
+  width: auto; padding: 0 9px; border-radius: 13px;
+  font-size: 10.5px; color: var(--ink-dim); background: #fff;
+}
+.swatch.on { border-color: var(--ink); }
+
+.sheet-fields { display: flex; flex-direction: column; gap: 4px; }
+.sheet-field { display: flex; gap: 4px; align-items: center; }
+.sheet-field input.k { flex: 0 0 34%; }
+.sheet-field input.v { flex: 1 1 auto; }
+.sheet-field input { font-size: 12px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; outline: none; }
+.sheet-field input:focus { border-color: var(--ink-faint); }
+.sheet-field .mini {
+  flex: 0 0 auto;
+  width: 24px; min-height: 24px;
+  padding: 0;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.sheet-notes {
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+  resize: vertical;
+}
+.sheet-notes:focus { border-color: var(--ink-faint); }
+
 /* ── 역할 선택창 (ui_roles.js) */
 
 .roles-modal { width: min(520px, 100%); }
