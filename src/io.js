@@ -9,9 +9,9 @@
 //   그래서 §11 의 점검은 src 안에서 그 경로 문자열이 **하나도 안 나오는 것**을 본다.
 //   설명하려고 적은 주석까지 걸리면 점검이 무뎌지므로 여기서도 안 적는다(CLAUDE.md 규칙 2).
 
-import { state, markExported, dirtyCount } from './state.js?v=20260726c';
-import { packBundle, unpackBundle, bundleFileName } from './serialize.js?v=20260726c';
-import { nfc } from './parse.js?v=20260726c';
+import { state, markExported, dirtyCount } from './state.js?v=20260726d';
+import { packBundle, unpackBundle, bundleFileName } from './serialize.js?v=20260726d';
+import { nfc } from './parse.js?v=20260726d';
 
 const KEY = 'charmap.work';
 const SNAP_KEY = 'charmap.snap';      // 직전 상태 3개를 굴린다

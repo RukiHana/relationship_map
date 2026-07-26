@@ -11,9 +11,9 @@
 // 아이패드에는 1단계가 없다 — 터치에 호버가 없어서 탭하면 곧바로 2단계로 간다.
 // **길게 누르기는 쓰지 않는다.** 브라우저 자체 메뉴와 충돌한다.
 
-import { state, parsed, adjacency, vocabulary, touchUI, subscribe, byId } from './state.js?v=20260726c';
-import { moveCharacter, groupColor } from './model.js?v=20260726c';
-import { colorOf, styleOf } from './roles.js?v=20260726c';
+import { state, parsed, adjacency, vocabulary, touchUI, subscribe, byId } from './state.js?v=20260726d';
+import { moveCharacter, groupColor } from './model.js?v=20260726d';
+import { colorOf, styleOf } from './roles.js?v=20260726d';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -131,7 +131,20 @@ function nodeFromEvent(e) {
   return el ? el.dataset.id : null;
 }
 
+/**
+ * 관계 카드 · 도구 단추 · 선 후보 목록은 **관계도 위에 떠 있는 별개의 UI** 다.
+ * 다만 DOM 상으로는 `.graph` 안에 있어서 포인터 이벤트가 여기까지 올라온다.
+ *
+ * 걸러내지 않으면 이렇게 된다 — 카드의 단추를 누르면 관계도가 「빈 곳 누름」으로
+ * 받아 pointerup 에서 선택을 풀고, 그 바람에 카드가 다시 그려지면서 **눌린 단추가
+ * DOM 에서 사라진다. 그러면 click 이 아예 안 와서 아무 일도 일어나지 않는다.**
+ */
+function onOverlay(e) {
+  return !!e.target.closest?.('#card, #graph-tools, #edge-pick');
+}
+
 function onPointerDown(e) {
+  if (onOverlay(e)) return;
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
   if (pointers.size === 2) {
@@ -170,6 +183,7 @@ function onPointerDown(e) {
 }
 
 function onPointerMove(e) {
+  if (onOverlay(e) && !drag && !pan && !wire && !pinch) return;
   if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
   if (pinch && pointers.size >= 2) {
@@ -220,6 +234,8 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
+  // 끌던 게 없는데 겹쳐 있는 UI 위에서 뗐으면 관계도가 상관할 일이 아니다
+  if (onOverlay(e) && !drag && !pan && !wire) return;
   const wasDrag = drag, wasPan = pan, wasWire = wire;
   pointers.delete(e.pointerId);
   if (pointers.size < 2) pinch = null;

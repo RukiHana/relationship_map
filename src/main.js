@@ -4,32 +4,32 @@
 // 조용한 복원은 하지 않는다 — 그 상태에서 파일을 가져오면 「아까 그건 어디 갔지」가
 // 된다(계획서 §8).
 
-import { VERSION } from './version.js?v=20260726c';
+import { VERSION } from './version.js?v=20260726d';
 import {
   state, subscribe, hydrate, mutate, touchUI, undo, redo, canUndo, canRedo,
   dirtyCount, markExported, parsed, vocabulary, setSaver, flushSave, byId,
-} from './state.js?v=20260726c';
+} from './state.js?v=20260726d';
 import {
   addCharacter, previewRename, applyRename, previewDelete, applyDelete,
   loadBundle, addSessionRole,
   appendRelationLine, replaceRelationLine, deleteRelationLine,
-} from './model.js?v=20260726c';
-import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726c';
-import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726c';
+} from './model.js?v=20260726d';
+import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726d';
+import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726d';
 import {
   initGraph, select, toggleShowAll, setHotRelation, fitToView,
   setConnectMode, isConnectMode,
-} from './ui_graph.js?v=20260726c';
-import { pickRoles } from './ui_roles.js?v=20260726c';
-import { openSheet, characterJSON } from './ui_sheet.js?v=20260726c';
-import { initCard } from './ui_card.js?v=20260726c';
+} from './ui_graph.js?v=20260726d';
+import { pickRoles } from './ui_roles.js?v=20260726d';
+import { openSheet, characterJSON } from './ui_sheet.js?v=20260726d';
+import { initCard } from './ui_card.js?v=20260726d';
 import {
   initIO, saveWork, loadWork, clearWork, storageWorks, pushSnapshot,
   setOtherTabHandler, exportBundle, copyText, readFile, prepareImport, describeCompare,
-} from './io.js?v=20260726c';
+} from './io.js?v=20260726d';
 import {
   confirmBox, alertBox, promptBox, pasteBox, selectableBox, checkListBox, notice,
-} from './ui_dialog.js?v=20260726c';
+} from './ui_dialog.js?v=20260726d';
 
 const $ = (id) => document.getElementById(id);
 
