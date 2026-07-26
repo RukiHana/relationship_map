@@ -1,0 +1,512 @@
+/* style.css — 디자인 시안 1a 「미니멀 실무형」
+ *
+ * 값의 출처는 D:\relationship map\ 의 핸드오프 번들이다. 그 목업은
+ * **저장소에 커밋하지 않는다** — 캐릭터 이름 10명이 들어 있다(계획서 §7-1).
+ * 여기에는 값만 옮겼다.
+ *
+ * 그대로 못 옮긴 것 4가지(§7-1):
+ *   1. 프레임의 라운드·그림자는 뺐다. 실제 앱은 브라우저 창을 통째로 채운다
+ *   2. 좌표는 픽셀이다. 목업의 % + preserveAspectRatio="none" 은 선 각도를 왜곡한다
+ *   3. 텍스트 목록은 <div> 나열이 아니라 2층 편집 영역이다
+ *   4. 계열 색이 4개가 아니라 10개다
+ */
+
+:root {
+  /* 배경·뉴트럴 */
+  --graph-bg: #fafafa;
+  --list-bg: #f4f5f7;
+  --card-bg: #fff;
+  --line: #dfe2e7;
+  --line-soft: #e6e8eb;
+  --ink: #20242b;
+  --ink-soft: #3a3f47;
+  --ink-dim: #6b7280;
+  --ink-faint: #8a94a3;
+
+  /* 계열 색 — src/roles.json 의 categories 와 같은 값.
+     목업이 갖고 있던 4색(#c2683f · #c8467a · #4a6fb0 · #8b3a3a)이 그중 넷과 일치한다 */
+  --cat-direct: #c2683f;
+  --cat-extended: #a8794a;
+  --cat-peer: #4f8a6b;
+  --cat-work: #4a6fb0;
+  --cat-contract: #6b6fa8;
+  --cat-romance: #c8467a;
+  --cat-hostile: #8b3a3a;
+  --cat-mentor: #8a6d3b;
+  --cat-special: #5f6570;
+  --cat-slot: #9aa0a6;
+  --cat-unknown: #b6bcc4;      /* roles.json 에 없는 말은 회색으로 떨어진다(§5) */
+
+  /* 소속(세력) 색 — 채도 낮은 청회색. 세력은 노드 색이 맡는다(§5) */
+  --grp-0: #8a94a3;
+  --grp-1: #5c6675;
+  --grp-2: #aeb6c2;
+  --grp-3: #7d8794;
+  --grp-4: #9aa4b1;
+  --grp-5: #6b7583;
+
+  --mono: Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+
+  --line-h: 24px;              /* 12px × line-height 2. 하이라이트 정렬의 근거다 */
+  --list-pad-y: 14px;
+  --list-pad-x: 18px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--ink);
+  background: var(--graph-bg);
+  /* 페이지 자체가 늘어나거나 당겨서 새로고침되지 않게 (§7) */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;              /* 아이패드 사파리 주소창 때문에 dvh 가 필요하다 */
+}
+
+/* ─────────────────────────────────────────── 위 막대 */
+
+#topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 7px 10px;
+  background: #fff;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+button {
+  font: 12px var(--sans);
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-height: 30px;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+button:hover:not(:disabled) { background: #f7f8fa; }
+button:disabled { opacity: .4; cursor: default; }
+button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+button.primary { font-weight: 700; }
+
+.spacer { flex: 1 1 auto; }
+
+.pill {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  padding: 4px 8px;
+  border-radius: 20px;
+  background: #f1f3f5;
+  white-space: nowrap;
+}
+.pill.warn { background: #fbeaea; color: #8b3a3a; }
+
+/* 부팅 선택 줄 · 안내 (§8 — 조용한 복원은 하지 않는다) */
+
+#notices { flex: 0 0 auto; }
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  background: #eef2f7;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-soft);
+}
+.notice.warn { background: #fbeaea; color: #8b3a3a; }
+.notice.good { background: #e8f3ec; color: #226844; }
+.notice button { padding: 4px 9px; min-height: 26px; }
+.notice .x { margin-left: auto; border: 0; background: transparent; color: inherit; font-size: 14px; }
+
+/* ─────────────────────────────────────────── 위아래 분할 65 : 35 */
+
+#split {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#graph-pane { flex: 65 1 0%; position: relative; min-height: 0; overflow: hidden; }
+#list-pane  { flex: 35 1 0%; position: relative; min-height: 0; overflow: hidden; background: var(--list-bg); }
+
+#graph-pane.collapsed, #list-pane.collapsed { flex: 0 0 0%; }
+
+/* 분할선 — 보이는 건 9px, **집는 건 24px 이상**.
+   9px 를 손가락으로 못 집는다(§7-1). 선 클릭에서 쓰는 것과 같은 수법이다. */
+#divider {
+  position: relative;
+  flex: 0 0 9px;
+  background: #fff;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: row-resize;
+  touch-action: none;
+  z-index: 5;
+}
+#divider::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  top: -9px; bottom: -9px;   /* 9 + 9 + 9 = 27px */
+}
+#divider .grip {
+  width: 30px; height: 3px;
+  border-radius: 2px;
+  background: #c7cbd2;
+  pointer-events: none;
+}
+#divider.dragging .grip { background: var(--ink-faint); }
+
+/* ─────────────────────────────────────────── 관계도 */
+
+.graph {
+  position: absolute;
+  inset: 0;
+  background: var(--graph-bg);
+  overflow: hidden;
+  /* 아이패드에서 반드시 필요한 것들(§7) */
+  touch-action: none;
+  overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 사파리 가장자리 끌기가 뒤로가기로 먹힌다. 가장자리까지 붙이지 않는다(§7) */
+#viewport {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+#edges {
+  position: absolute;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  overflow: visible;          /* 변환된 좌표계 밖의 선도 그려야 한다 */
+  pointer-events: none;
+}
+
+.edge {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;   /* 확대해도 굵기가 유지된다(§7-1) */
+}
+.edge.dashed { stroke-dasharray: 3 2; }
+.edge.hot { stroke-width: 4; }
+
+.arrow { stroke: none; }
+
+#nodes { position: absolute; inset: 0; }
+
+.node {
+  position: absolute;
+  left: 0; top: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(20, 20, 30, .08);
+  white-space: nowrap;
+  cursor: grab;
+  touch-action: none;
+}
+.node .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--grp-0);
+}
+/* 관계가 0인 노드 — 선이 안 보이는 화면에서는 고립된 인물이 안 드러난다(§7) */
+.node.lonely { border-style: dashed; border-color: #c9ced6; }
+.node.dragging { cursor: grabbing; box-shadow: 0 3px 10px rgba(20, 20, 30, .18); z-index: 3; }
+.node.focus { border-color: var(--ink); box-shadow: 0 0 0 2px rgba(32, 36, 43, .12), 0 1px 3px rgba(20, 20, 30, .08); }
+
+/* 흐리기 — 초점이 바뀌면 클래스 하나만 토글한다. 나머지는 CSS 가 한다(§7) */
+.graph.focused .node { opacity: .26; transition: opacity .12s; }
+.graph.focused .node.focus,
+.graph.focused .node.related { opacity: 1; }
+
+.role-label {
+  position: absolute;
+  left: 0; top: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, .85);
+  padding: 1px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+#labels { position: absolute; inset: 0; pointer-events: none; }
+
+/* 관계 카드 — 읽기 전용. 선택을 풀면 사라진다(§7) */
+
+#card {
+  position: absolute;
+  right: 12px; top: 12px;
+  width: min(280px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(20, 20, 30, .10);
+  font-size: 12px;
+  z-index: 4;
+  display: none;
+}
+#card.open { display: block; }
+#card .head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  font-weight: 700;
+  position: sticky; top: 0; background: #fff;
+}
+#card .head .count { font-weight: 400; color: var(--ink-dim); font-size: 11.5px; }
+#card .head .x { margin-left: auto; border: 0; background: transparent; font-size: 15px; padding: 2px 6px; min-height: 0; }
+#card .card-acts { display: flex; gap: 6px; padding: 8px 12px 4px; }
+#card .card-acts button { font-size: 11px; padding: 4px 8px; min-height: 24px; }
+#card ul { list-style: none; margin: 0; padding: 4px 0; }
+#card li {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+  padding: 3px 12px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+#card li:hover { background: #f4f6f8; border-left-color: var(--ink-faint); }
+#card li.err { color: #8b3a3a; }
+#card .empty { padding: 10px 12px; color: var(--ink-dim); font-size: 12px; }
+
+/* 관계도 위 도구 — 가장자리에서 떨어뜨린다(§7) */
+#graph-tools {
+  position: absolute;
+  left: 12px; bottom: 12px;
+  display: flex; gap: 6px;
+  z-index: 4;
+}
+#graph-tools button { box-shadow: 0 1px 3px rgba(20, 20, 30, .10); }
+
+/* 선 후보 목록 — 거의 겹친 두 선을 눌렀을 때(§7) */
+#edge-pick {
+  position: absolute;
+  z-index: 6;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(20, 20, 30, .14);
+  padding: 4px 0;
+  font-size: 12px;
+  display: none;
+}
+#edge-pick.open { display: block; }
+#edge-pick button {
+  display: block; width: 100%;
+  text-align: left;
+  border: 0; border-radius: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+/* ─────────────────────────────────────────── 텍스트 목록 (2층) */
+
+#text-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+/* 두 층은 글꼴·줄높이·여백·테두리가 **정확히 같아야 한다.**
+   디자인이 모노스페이스와 고정 line-height 를 고른 덕분에 줄이 정확히 맞는다(§7-1). */
+#hl, #src {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: var(--list-pad-y) var(--list-pad-x);
+  border: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 2;
+  letter-spacing: 0;
+  tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: normal;
+  overflow: auto;
+  background: transparent;
+}
+
+/* ★ 어느 층이 글자를 그리는가 — 계획서 §7-1 을 한 겹 뒤집었다.
+ *
+ * 계획서는 「pre 로 색칠하고 그 위에 글자를 투명하게 만든 textarea 를 포갠다」로
+ * 적었다. 두 층을 두는 이유(「textarea 는 특정 줄만 색칠할 수 없다」)는 그대로지만,
+ * **글자는 textarea 가 그리고 pre 는 배경만 칠하게** 뒤집었다.
+ *
+ * 이유: 한글을 조합하는 동안 미확정 글자는 textarea 안에만 있고 pre 에는 없다.
+ * 글자를 pre 가 그리면 조합 중인 글자가 화면에서 사라지거나 두 층이 어긋난다 —
+ * §11 이 「한글 입력 중에도 어긋나지 않는지」를 확인 항목으로 둔 바로 그 증상이다.
+ * 배경만 칠하면 조합 중에도 절대 안 어긋난다.
+ *
+ * 잃는 것: 줄 안의 특정 낱말만 색칠하는 것. 필요한 강조가 전부 **줄 단위**라
+ * (오류 줄 · 카드에서 눌러 온 줄) 실제로 잃는 게 없다.
+ */
+#hl {
+  pointer-events: none;
+  color: transparent;         /* 글자는 안 그린다. 배경만 칠한다 */
+  z-index: 1;
+  overflow: hidden;           /* 스크롤은 textarea 가 몰고 여기는 따라만 간다 */
+}
+#hl .ln { display: block; min-height: var(--line-h); border-radius: 2px; }
+#hl .ln.err   { background: rgba(139, 58, 58, .10); box-shadow: inset 2px 0 0 #8b3a3a; }
+#hl .ln.warn  { background: rgba(200, 150, 40, .14); box-shadow: inset 2px 0 0 #b8892f; }
+#hl .ln.focus { background: rgba(74, 111, 176, .16); box-shadow: inset 2px 0 0 #4a6fb0; }
+
+#src {
+  z-index: 2;
+  color: var(--ink-soft);
+  -webkit-text-fill-color: var(--ink-soft);
+  caret-color: var(--ink-soft);
+  resize: none;
+  outline: none;
+}
+#src::selection { background: rgba(74, 111, 176, .25); }
+
+/* 목록 위 얇은 도구 줄 */
+#list-tools {
+  position: absolute;
+  right: 10px; bottom: 8px;
+  display: flex; gap: 6px;
+  z-index: 3;
+}
+#list-tools button {
+  font-size: 11px; padding: 4px 8px; min-height: 24px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 1px 3px rgba(20, 20, 30, .10);
+}
+
+/* ─────────────────────────────────────────── 아래 막대 */
+
+#statusbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  background: #fff;
+  border-top: 1px solid var(--line-soft);
+}
+#dirty.hot { color: #8b3a3a; font-weight: 700; }
+#version { margin-left: auto; font-family: var(--mono); color: var(--ink-faint); }
+
+/* ─────────────────────────────────────────── 대화상자 */
+
+#modal-back {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 30, .30);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 100;
+}
+#modal-back.open { display: flex; }
+
+.modal {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(20, 20, 30, .25);
+  width: min(460px, 100%);
+  max-height: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal h2 { font-size: 14px; margin: 0; padding: 14px 16px 10px; }
+.modal .body {
+  padding: 0 16px 12px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  overflow: auto;
+  line-height: 1.7;
+}
+.modal .body p { margin: 0 0 8px; }
+.modal .lines {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: #f6f7f9;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 6px 0 10px;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow: auto;
+}
+.modal .lines .del { color: #8b3a3a; }
+.modal .lines .add { color: #226844; }
+.modal input[type="text"], .modal textarea {
+  width: 100%;
+  font: 12.5px var(--sans);
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  outline: none;
+}
+.modal textarea { font-family: var(--mono); font-size: 11.5px; min-height: 150px; resize: vertical; }
+.modal input[type="text"]:focus, .modal textarea:focus { border-color: var(--ink-faint); }
+.modal .foot {
+  display: flex; gap: 6px; justify-content: flex-end;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.modal .foot .left { margin-right: auto; }
+.modal .err { color: #8b3a3a; font-size: 12px; min-height: 17px; }
+
+.checklist { list-style: none; margin: 0; padding: 0; }
+.checklist li { display: flex; align-items: center; gap: 7px; padding: 3px 0; }
+.checklist code { font-family: var(--mono); font-size: 11.5px; }
+.checklist .cat { color: var(--ink-dim); font-size: 11px; }
+
+/* ─────────────────────────────────────────── 좁은 화면 */
+
+@media (max-width: 560px) {
+  #topbar { padding: 6px 8px; gap: 5px; }
+  button { padding: 6px 8px; }
+  #card { right: 8px; top: 8px; width: min(240px, calc(100% - 16px)); }
+}
