@@ -8,7 +8,7 @@
 // **선 클릭 판정이 완벽하지 않아도 되는 이유가 이 카드다.** 없으면 정확도에
 // 목을 매야 하는데, 있으면 최선을 다하고 실패해도 그만이다.
 
-import { state, adjacency, subscribe, byId } from './state.js?v=20260726a';
+import { state, adjacency, subscribe, byId } from './state.js?v=20260726b';
 
 let box, hooks = {};
 
@@ -67,8 +67,23 @@ function render() {
     const ul = document.createElement('ul');
     for (const rel of rels) {
       const li = document.createElement('li');
-      li.textContent = rel.raw;                        // **원본 줄 그대로**
+      const txt = document.createElement('span');
+      txt.className = 'ln-text';
+      txt.textContent = rel.raw;                       // **원본 줄 그대로**
+      li.appendChild(txt);
       if (rel.diagnostics.some((d) => d.level === 'err')) li.classList.add('err');
+
+      // 여기서 고쳐도 **그 줄 하나만** 갈아끼운다(§4). 카드가 관계 줄을
+      // 다시 채우지 않는 것과 이건 다른 얘기다 — 버튼은 입력이 아니다.
+      const acts = document.createElement('span');
+      acts.className = 'ln-acts';
+      for (const [label, hook] of [['고치기', 'onEditLine'], ['지우기', 'onDeleteLine']]) {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.addEventListener('click', (ev) => { ev.stopPropagation(); hooks[hook]?.(rel.lineIndex); });
+        acts.appendChild(b);
+      }
+      li.appendChild(acts);
 
       // 카드의 줄에 손을 올리면 해당 선이 굵어진다 — 이 역방향 연결이
       // 선 겹침 문제의 최종 안전망이다(§7)

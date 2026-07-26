@@ -2,10 +2,12 @@
 //
 // 상태를 바꾸는 건 전부 state.mutate() 를 지난다.
 
-import { state, mutate, parsed, byName as findByName, byId as findById } from './state.js?v=20260726a';
-import { norm, parseDocument, makeContext } from './parse.js?v=20260726a';
-import { mergeRoles } from './roles.js?v=20260726a';
-import { findLinesWithName, removeLines, renameInLines } from './serialize.js?v=20260726a';
+import { state, mutate, parsed, byName as findByName, byId as findById } from './state.js?v=20260726b';
+import { norm, parseDocument, makeContext } from './parse.js?v=20260726b';
+import { mergeRoles } from './roles.js?v=20260726b';
+import {
+  findLinesWithName, removeLines, renameInLines, replaceLine, serializeRelation,
+} from './serialize.js?v=20260726b';
 
 // ─────────────────────────────────────────── id — 영구 결번(§4)
 
@@ -193,6 +195,55 @@ export function applyLines(lines, { coalesce = 'text' } = {}) {
     }
     placeNew(s);
   }, { coalesce });
+}
+
+// ─────────────────────────────────────────── 관계 줄 — 줄 단위로만 건드린다(§4)
+//
+// > 관계 내용의 원본은 텍스트다. 관계도에서 편집하면 해당 **줄 하나만 갈아끼운다.**
+// > 문서 전체를 다시 써내는 일은 없다.
+//
+// 이걸 안 지키면 두 화면이 서로 덮어쓰기 시작한다.
+
+/** 관계도에서 새로 만든 관계 — 텍스트 **맨 끝에 한 줄** 붙인다. */
+export function appendRelationLine(nameA, nameB, roleA, roleB) {
+  const line = serializeRelation({
+    nameA, nameB,
+    roleA: { text: roleA ?? '' , empty: !(roleA ?? '') },
+    roleB: { text: roleB ?? '' , empty: !(roleB ?? '') },
+  });
+  return mutate(`관계 추가 — ${nameA}-${nameB}`, (s) => {
+    // 끝이 빈 줄이면 그 앞에 넣어 파일이 지저분해지지 않게 한다
+    const at = s.lines.length && s.lines.at(-1).trim() === '' ? s.lines.length - 1 : s.lines.length;
+    s.lines = [...s.lines.slice(0, at), line, ...s.lines.slice(at)];
+    return { line, index: at };
+  });
+}
+
+/** 이미 있는 줄의 역할만 바꾼다. **그 줄 하나만** 갈아끼운다. */
+export function replaceRelationLine(lineIndex, roleA, roleB) {
+  const e = parsed().entries[lineIndex];
+  if (!e || e.kind !== 'relation' || !e.ok) return { ok: false, error: '관계 줄이 아닙니다' };
+
+  const line = serializeRelation({
+    nameA: e.nameA, nameB: e.nameB,
+    roleA: { text: roleA ?? '', empty: !(roleA ?? '') },
+    roleB: { text: roleB ?? '', empty: !(roleB ?? '') },
+  });
+  mutate(`관계 수정 — ${e.nameA}-${e.nameB}`, (s) => {
+    s.lines = replaceLine(s.lines, lineIndex, line);
+  });
+  return { ok: true, line };
+}
+
+/** 관계 한 건 지우기 — **그 줄만** 지운다. 빈 줄과 주석은 안 건드린다. */
+export function deleteRelationLine(lineIndex) {
+  const e = parsed().entries[lineIndex];
+  if (!e || e.kind !== 'relation') return { ok: false, error: '관계 줄이 아닙니다' };
+  const before = state.lines[lineIndex];
+  mutate(`관계 삭제 — ${before}`, (s) => {
+    s.lines = removeLines(s.lines, [lineIndex]);
+  });
+  return { ok: true, removed: before };
 }
 
 // ─────────────────────────────────────────── 가져오기 반영

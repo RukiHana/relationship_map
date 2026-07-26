@@ -4,26 +4,31 @@
 // 조용한 복원은 하지 않는다 — 그 상태에서 파일을 가져오면 「아까 그건 어디 갔지」가
 // 된다(계획서 §8).
 
-import { VERSION } from './version.js?v=20260726a';
+import { VERSION } from './version.js?v=20260726b';
 import {
   state, subscribe, hydrate, mutate, touchUI, undo, redo, canUndo, canRedo,
   dirtyCount, markExported, parsed, vocabulary, setSaver, flushSave, byId,
-} from './state.js?v=20260726a';
+} from './state.js?v=20260726b';
 import {
   addCharacter, previewRename, applyRename, previewDelete, applyDelete,
   loadBundle, addSessionRole,
-} from './model.js?v=20260726a';
-import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726a';
-import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726a';
-import { initGraph, select, toggleShowAll, setHotRelation, fitToView } from './ui_graph.js?v=20260726a';
-import { initCard } from './ui_card.js?v=20260726a';
+  appendRelationLine, replaceRelationLine, deleteRelationLine,
+} from './model.js?v=20260726b';
+import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726b';
+import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726b';
+import {
+  initGraph, select, toggleShowAll, setHotRelation, fitToView,
+  setConnectMode, isConnectMode,
+} from './ui_graph.js?v=20260726b';
+import { pickRoles } from './ui_roles.js?v=20260726b';
+import { initCard } from './ui_card.js?v=20260726b';
 import {
   initIO, saveWork, loadWork, clearWork, storageWorks, pushSnapshot,
   setOtherTabHandler, exportBundle, copyText, readFile, prepareImport, describeCompare,
-} from './io.js?v=20260726a';
+} from './io.js?v=20260726b';
 import {
   confirmBox, alertBox, promptBox, pasteBox, selectableBox, checkListBox, notice,
-} from './ui_dialog.js?v=20260726a';
+} from './ui_dialog.js?v=20260726b';
 
 const $ = (id) => document.getElementById(id);
 
@@ -41,13 +46,31 @@ async function boot() {
   setOtherTabHandler(otherTabOpened);
 
   initText({ onFocusLine: () => {} });
-  initGraph({ onSelect: () => {}, onEdgeOpen: onEdgeOpen });
+  initGraph({
+    onSelect: () => {},
+    onEdgeOpen,
+    onConnect,
+    onConnectToEmpty,
+    onConnectModeChange: (on) => {
+      $('btn-connect').classList.toggle('on', on);
+      if (on) {
+        notice({
+          id: 'connect', kind: '',
+          text: '연결 모드입니다 — 두 노드를 차례로 누르면 관계가 만들어집니다. 빈 곳을 누르면 무릅니다.',
+        });
+      } else {
+        document.querySelector('[data-nid="connect"]')?.remove();
+      }
+    },
+  });
   initCard({
     onClose: () => select(null),
     onHover: (rel) => setHotRelation(rel),
     onPickLine: (i) => focusOnLine(i),
     onRename: doRename,
     onDelete: doDelete,
+    onEditLine: editRelationLine,
+    onDeleteLine: removeRelationLine,
   });
 
   wireToolbar();
@@ -246,6 +269,7 @@ function wireToolbar() {
   $('btn-redo').addEventListener('click', () => { flushText(); redo(); });
   $('btn-add').addEventListener('click', addCharacterFlow);
 
+  $('btn-connect').addEventListener('click', () => setConnectMode(!isConnectMode()));
   $('btn-showall').addEventListener('click', () => { toggleShowAll(); renderChrome(); });
   $('btn-fit').addEventListener('click', () => fitToView());
   $('btn-collapse-graph').addEventListener('click', () => collapse('graph'));
@@ -502,6 +526,82 @@ function applyRatio() {
 function onEdgeOpen(rels) {
   if (!rels?.length) return;
   focusOnLine(rels[0].lineIndex);
+}
+
+// ─────────────────────────────────────────── 관계 만들기 (2단계)
+
+/**
+ * 두 인물이 정해졌다 → 역할 선택창 → **텍스트에 줄 하나 추가**(§4).
+ * 관계도가 텍스트를 다시 써내는 일은 없다. 늘 한 줄이다.
+ */
+async function onConnect(idA, idB) {
+  const a = byId(idA), b = byId(idB);
+  if (!a || !b) return;
+
+  const picked = await pickRoles({
+    title: '관계 정하기',
+    nameA: a.name, nameB: b.name,
+    idA, idB,
+  });
+  if (!picked) return;
+
+  const { index } = appendRelationLine(a.name, b.name, picked.roleA, picked.roleB);
+  select(idA);
+  focusOnLine(index);
+}
+
+/** **빈 곳에 놓으면 거기에 새 캐릭터를 만들고 이름 입력으로 넘어간다**(§7). */
+async function onConnectToEmpty(fromId, x, y) {
+  const from = byId(fromId);
+  if (!from) return;
+
+  const name = await promptBox({
+    title: '새 캐릭터',
+    message: `${from.name} 와(과) 이을 사람을 만듭니다.`,
+    placeholder: '이름',
+    validate: (v) => {
+      const t = v.normalize('NFC').trim();
+      if (!t) return '이름이 비었습니다';
+      if (state.characters.some((c) => c.name === t)) return `'${t}' 는 이미 있습니다`;
+      return null;
+    },
+  });
+  if (name === null) return;
+
+  const r = addCharacter(name, [Math.round(x), Math.round(y)]);
+  if (!r.ok) { await alertBox({ title: '만들지 못했습니다', message: r.error }); return; }
+  await onConnect(fromId, r.character.id);
+}
+
+/** 이미 있는 줄의 역할만 바꾼다 — **그 줄 하나만** 갈아끼운다(§4). */
+async function editRelationLine(lineIndex) {
+  const e = parsed().entries[lineIndex];
+  if (!e || e.kind !== 'relation' || !e.ok) return;
+
+  const picked = await pickRoles({
+    title: '관계 고치기',
+    nameA: e.nameA, nameB: e.nameB,
+    idA: e.idA, idB: e.idB,
+    roleA: e.roleA?.text, roleB: e.roleB?.text,
+  });
+  if (!picked) return;
+
+  const r = replaceRelationLine(lineIndex, picked.roleA, picked.roleB);
+  if (!r.ok) { await alertBox({ title: '못 고쳤습니다', message: r.error }); return; }
+  focusOnLine(lineIndex);
+}
+
+async function removeRelationLine(lineIndex) {
+  const line = state.lines[lineIndex];
+  const ok = await confirmBox({
+    title: '이 관계를 지웁니다',
+    message: '이 줄 하나만 사라집니다. 되돌리기 한 번으로 돌아옵니다.',
+    lines: [line],
+    okText: '지우기',
+    danger: true,
+  });
+  if (!ok) return;
+  deleteRelationLine(lineIndex);
 }
 
 // ─────────────────────────────────────────── 사고 대비

@@ -75,7 +75,10 @@ def main() -> int:
             out, c = CONST_RE.subn(lambda m: m.group(1) + new + m.group(3), out)
             n += c
         if n:
-            p.write_text(out, encoding="utf-8")
+            # newline="" 이 없으면 윈도우에서 \n 이 \r\n 으로 바뀌어
+            # **고치지도 않은 줄까지 전부 바뀐 것처럼** 보인다. 버전 한 글자 올렸는데
+            # 32군데가 아니라 파일 전체가 diff 에 뜬다.
+            p.write_text(out, encoding="utf-8", newline="")
             touched.append((p.relative_to(ROOT).as_posix(), n))
             total += n
 

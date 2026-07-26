@@ -11,9 +11,9 @@
 // 아이패드에는 1단계가 없다 — 터치에 호버가 없어서 탭하면 곧바로 2단계로 간다.
 // **길게 누르기는 쓰지 않는다.** 브라우저 자체 메뉴와 충돌한다.
 
-import { state, parsed, adjacency, vocabulary, touchUI, subscribe, byId } from './state.js?v=20260726a';
-import { moveCharacter, groupColor } from './model.js?v=20260726a';
-import { colorOf, styleOf } from './roles.js?v=20260726a';
+import { state, parsed, adjacency, vocabulary, touchUI, subscribe, byId } from './state.js?v=20260726b';
+import { moveCharacter, groupColor } from './model.js?v=20260726b';
+import { colorOf, styleOf } from './roles.js?v=20260726b';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -33,6 +33,12 @@ const nodeEls = new Map();
 let edges = [];            // 지금 그려진 선들 {rel, group, pts, color, style}
 let hotKey = null;         // 카드에서 손을 올린 관계
 let openEdgeKey = null;    // 3단계 — 눌러서 라벨이 나온 관계 쌍
+
+// ── 관계 만들기(2단계)
+let connectMode = false;   // 아이패드 경로: 버튼을 켜고 A 탭 → B 탭
+let connectFrom = null;    // 연결 모드에서 먼저 고른 인물
+let wire = null;           // 연결점을 끄는 중 { fromId, x, y }
+let wireEl = null;         // 고무줄 선
 
 // ─────────────────────────────────────────── 초기화
 
@@ -64,6 +70,11 @@ function toGraph(clientX, clientY) {
   return [(clientX - r.left - tx) / scale, (clientY - r.top - ty) / scale];
 }
 
+function insideGraph(clientX, clientY) {
+  const r = graph.getBoundingClientRect();
+  return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+}
+
 function applyTransform() {
   const { tx, ty, scale } = state.ui;
   viewport.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
@@ -89,11 +100,15 @@ export function fitToView(pad = 70) {
     applyTransform();
     return;
   }
+  const r = graph.getBoundingClientRect();
+  // 관계도가 접혀 있거나 아직 배치 전이면 크기가 0 이다. 그대로 계산하면 배율이
+  // 최소값으로 튀고 화면이 엉킨 채 남는다 — 그냥 아무것도 안 하는 게 맞다.
+  if (r.width < 40 || r.height < 40) return;
+
   const xs = chars.map((c) => c.pos[0]);
   const ys = chars.map((c) => c.pos[1]);
   const x0 = Math.min(...xs), x1 = Math.max(...xs);
   const y0 = Math.min(...ys), y1 = Math.max(...ys);
-  const r = graph.getBoundingClientRect();
   const s = Math.min(
     MAX_SCALE,
     Math.max(MIN_SCALE, Math.min((r.width - pad * 2) / Math.max(1, x1 - x0), (r.height - pad * 2) / Math.max(1, y1 - y0))),
@@ -136,6 +151,14 @@ function onPointerDown(e) {
   // 캡처를 못 잡아도 끌기는 돼야 한다 — 여기서 던지면 노드가 아예 안 움직인다
   try { graph.setPointerCapture(e.pointerId); } catch { /* noop */ }
 
+  // **몸통은 이동, 연결점은 연결.** 위치로 구분하니 헷갈릴 일이 없다(§7)
+  if (e.target.closest?.('.port') && id) {
+    const c = byId(id);
+    wire = { fromId: id, x: c.pos[0], y: c.pos[1] };
+    drawEdges();
+    return;
+  }
+
   if (id) {
     const c = byId(id);
     const [gx, gy] = toGraph(e.clientX, e.clientY);
@@ -153,6 +176,15 @@ function onPointerMove(e) {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
     if (pinch.dist > 0) setScale(pinch.scale * (d / pinch.dist), pinch.cx, pinch.cy);
+    return;
+  }
+
+  if (wire) {
+    const [gx, gy] = toGraph(e.clientX, e.clientY);
+    wire.x = gx; wire.y = gy;
+    drawWire();
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('.node');
+    for (const [id, el] of nodeEls) el.classList.toggle('drop-target', el === over && id !== wire.fromId);
     return;
   }
 
@@ -188,15 +220,34 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
-  const wasDrag = drag, wasPan = pan;
+  const wasDrag = drag, wasPan = pan, wasWire = wire;
   pointers.delete(e.pointerId);
   if (pointers.size < 2) pinch = null;
+
+  if (wasWire) {
+    wire = null;
+    for (const [, el] of nodeEls) el.classList.remove('drop-target');
+    drawEdges();
+    const overId = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('.node')?.dataset.id;
+    if (overId && overId !== wasWire.fromId) {
+      hooks.onConnect?.(wasWire.fromId, overId);
+    } else if (!overId && insideGraph(e.clientX, e.clientY)) {
+      // **빈 곳에 놓으면 거기에 새 캐릭터를 만든다.** 인물 구상을 스케치하듯 뿌린다(§7)
+      // 단 **관계도 밖(텍스트 칸·도구 막대)에 놓으면 조용히 무른다** — 거기 놓은 건
+      // 「여기에 만들어달라」가 아니라 「그만두겠다」에 가깝다
+      const [gx, gy] = toGraph(e.clientX, e.clientY);
+      hooks.onConnectToEmpty?.(wasWire.fromId, gx, gy);
+    }
+    return;
+  }
 
   if (wasDrag) {
     wasDrag.el?.classList.remove('dragging');
     drag = null;
     if (wasDrag.moved) {
       moveCharacter(wasDrag.id, wasDrag.x, wasDrag.y);   // ← 여기가 `1개` 다(§8)
+    } else if (connectMode) {
+      tapInConnectMode(wasDrag.id);                       // 아이패드 경로 — A 탭 → B 탭
     } else {
       select(wasDrag.id);                                 // 2단계 — 고정
     }
@@ -206,6 +257,7 @@ function onPointerUp(e) {
   if (wasPan) {
     pan = null;
     if (wasPan.moved) return;
+    if (connectMode) { cancelConnect(); return; }         // 빈 곳을 누르면 고르던 걸 무른다
     // 3단계 — 고정 상태에서 선 클릭. **전체 보기에서는 선 클릭을 안 받는다**(조망용)
     if (state.ui.focusId && !state.ui.showAll) {
       const hit = pickEdge(e.clientX, e.clientY);
@@ -220,8 +272,59 @@ function onPointerCancel(e) {
   // 이걸 빼면 손을 뗐는데도 노드가 따라다닌다(§7)
   pointers.delete(e.pointerId);
   if (drag) { drag.el?.classList.remove('dragging'); drag = null; render(); }
+  if (wire) {
+    wire = null;
+    for (const [, el] of nodeEls) el.classList.remove('drop-target');
+    drawEdges();
+  }
   pan = null;
   if (pointers.size < 2) pinch = null;
+}
+
+// ─────────────────────────────────────────── 관계 만들기(2단계)
+
+/**
+ * 아이패드 경로. **길게 누르기는 쓰지 않는다** — 브라우저 자체 메뉴와 충돌해서
+ * 「앱이 고장난 것 같다」는 인상을 주는 대표적 원인이다(§7).
+ * 손가락으로 작은 연결점을 집는 것도 실패율이 높아서, 이 모드가 실제로 쓰이는 경로다.
+ */
+export function setConnectMode(on) {
+  connectMode = !!on;
+  connectFrom = null;
+  if (connectMode) select(null);
+  graph.classList.toggle('connecting', connectMode);
+  render();
+  hooks.onConnectModeChange?.(connectMode);
+  return connectMode;
+}
+
+export function isConnectMode() { return connectMode; }
+
+function cancelConnect() {
+  connectFrom = null;
+  render();
+}
+
+function tapInConnectMode(id) {
+  if (!connectFrom) { connectFrom = id; render(); return; }
+  if (connectFrom === id) { cancelConnect(); return; }    // 같은 걸 또 누르면 무른다
+  const from = connectFrom;
+  connectFrom = null;
+  render();
+  hooks.onConnect?.(from, id);
+}
+
+/** 끄는 동안 보이는 고무줄. drawEdges 가 지우므로 그 뒤에 다시 붙인다. */
+function drawWire() {
+  if (!wire) { wireEl = null; return; }
+  const a = byId(wire.fromId)?.pos;
+  if (!a) return;
+  if (!wireEl || !wireEl.isConnected) {
+    wireEl = document.createElementNS(SVGNS, 'path');
+    wireEl.setAttribute('class', 'edge wire');
+    svg.appendChild(wireEl);
+  }
+  wireEl.setAttribute('d', `M ${a[0]} ${a[1]} L ${wire.x} ${wire.y}`);
 }
 
 function onWheel(e) {
@@ -286,7 +389,8 @@ function drawNodes() {
       el = document.createElement('div');
       el.className = 'node';
       el.dataset.id = c.id;
-      el.innerHTML = '<span class="dot"></span><span class="nm"></span>';
+      // `.port` 가 연결점이다 — 몸통과 자리가 달라서 이동과 연결이 안 헷갈린다(§7)
+      el.innerHTML = '<span class="dot"></span><span class="nm"></span><span class="port" title="끌어서 관계 만들기"></span>';
       nodeLayer.appendChild(el);
       nodeEls.set(c.id, el);
     }
@@ -299,6 +403,7 @@ function drawNodes() {
     el.classList.toggle('lonely', (adj.get(c.id)?.rels.length ?? 0) === 0);
     el.classList.toggle('focus', c.id === focus);
     el.classList.toggle('related', !!related && related.has(c.id));
+    el.classList.toggle('connect-from', connectMode && connectFrom === c.id);
   }
 
   for (const [id, el] of nodeEls) {
@@ -395,6 +500,8 @@ function drawEdges() {
       edges.push({ rel, group: g, a, b, c, curved: off !== 0 });
     });
   }
+
+  drawWire();   // 고무줄은 늘 맨 위에 다시 붙인다
 }
 
 function addLabel(role, at, color) {

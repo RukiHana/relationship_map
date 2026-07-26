@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="charmap">
 <meta name="color-scheme" content="light">
 <title>charmap</title>
-<link rel="stylesheet" href="src/style.css?v=20260726a">
+<link rel="stylesheet" href="src/style.css?v=20260726b">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='9' cy='10' r='4' fill='%238a94a3'/><circle cx='23' cy='21' r='4' fill='%235c6675'/><path d='M11 13 L21 18' stroke='%23c2683f' stroke-width='2'/></svg>">
 </head>
 <body>
@@ -48,6 +48,8 @@
         <div id="edge-pick"></div>
 
         <div id="graph-tools">
+          <!-- 아이패드에서 관계를 만드는 정식 경로. 켜고 A 탭 → B 탭 (§7) -->
+          <button id="btn-connect" title="켜고 두 노드를 차례로 누르면 관계가 만들어집니다">연결</button>
           <button id="btn-showall" title="기본은 노드만. 누르면 선과 라벨 전부">전체 보기</button>
           <button id="btn-fit" title="전부 보이게 맞춤">맞춤</button>
           <button id="btn-collapse-graph" title="관계도 접기">▲</button>
@@ -85,7 +87,7 @@
 
 <div id="modal-back"></div>
 
-<script type="module" src="src/main.js?v=20260726a"></script>
+<script type="module" src="src/main.js?v=20260726b"></script>
 <noscript>이 도구는 자바스크립트가 있어야 돕니다.</noscript>
 
 </body>

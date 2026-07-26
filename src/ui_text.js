@@ -10,8 +10,8 @@
 //     **조합 종료만 믿지 않는다** — 입력이 멎으면 조합 여부와 무관하게 파싱하는 타이머를 같이 둔다
 //   · 하이라이트 pre 는 입력이 없는 층이라 언제든 다시 그려도 안전하다
 
-import { state, parsed, subscribe } from './state.js?v=20260726a';
-import { applyLines } from './model.js?v=20260726a';
+import { state, parsed, subscribe } from './state.js?v=20260726b';
+import { applyLines } from './model.js?v=20260726b';
 
 const QUIET_MS = 200;         // 손이 멎었다고 볼 시간
 const COMPOSE_GUARD_MS = 600; // 조합 이벤트가 안 올 때의 대비(위)

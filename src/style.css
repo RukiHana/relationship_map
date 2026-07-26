@@ -256,6 +256,41 @@ button.primary { font-weight: 700; }
 .graph.focused .node.focus,
 .graph.focused .node.related { opacity: 1; }
 
+/* ── 연결점 · 연결 모드 (2단계)
+   몸통은 이동, 연결점은 연결. **위치로 구분하니 헷갈릴 일이 없다**(§7) */
+
+.node .port {
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  width: 11px; height: 11px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--ink-faint);
+  box-shadow: 0 1px 2px rgba(20, 20, 30, .18);
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity .1s;
+  /* 작은 점이라 히트영역을 넓혀 준다 — 분할선·선 클릭과 같은 수법 */
+  touch-action: none;
+}
+.node .port::before { content: ""; position: absolute; inset: -8px; }
+.node:hover .port, .node.focus .port { opacity: 1; }
+/* 손가락에는 이 점이 안 뜬다. 아이패드는 `연결` 모드가 정식 경로다(§7) */
+@media (hover: none) { .node .port { display: none; } }
+
+.edge.wire { stroke: var(--ink-faint); stroke-dasharray: 4 3; stroke-width: 2; }
+
+.node.drop-target { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(32, 36, 43, .16); }
+
+.graph.connecting { cursor: crosshair; }
+.graph.connecting .node { cursor: crosshair; }
+.node.connect-from {
+  border-color: #4a6fb0;
+  box-shadow: 0 0 0 3px rgba(74, 111, 176, .22);
+}
+
 .role-label {
   position: absolute;
   left: 0; top: 0;
@@ -310,6 +345,19 @@ button.primary { font-weight: 700; }
 }
 #card li:hover { background: #f4f6f8; border-left-color: var(--ink-faint); }
 #card li.err { color: #8b3a3a; }
+#card li { display: flex; align-items: center; gap: 6px; }
+#card .ln-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#card .ln-acts { flex: 0 0 auto; display: flex; gap: 3px; opacity: 0; transition: opacity .1s; }
+#card li:hover .ln-acts { opacity: 1; }
+#card .ln-acts button {
+  font-family: var(--sans);
+  font-size: 10.5px;
+  padding: 2px 5px;
+  min-height: 20px;
+  border-radius: 4px;
+}
+/* 손가락에는 호버가 없다 — 아이패드에서는 늘 보인다 */
+@media (hover: none) { #card .ln-acts { opacity: 1; } }
 #card .empty { padding: 10px 12px; color: var(--ink-dim); font-size: 12px; }
 
 /* 관계도 위 도구 — 가장자리에서 떨어뜨린다(§7) */
@@ -497,6 +545,102 @@ button.primary { font-weight: 700; }
 }
 .modal .foot .left { margin-right: auto; }
 .modal .err { color: #8b3a3a; font-size: 12px; min-height: 17px; }
+
+/* ── 역할 선택창 (ui_roles.js) */
+
+.roles-modal { width: min(520px, 100%); }
+.roles-modal .body { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+
+.role-preview {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: #f6f7f9;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.role-tabs { display: flex; gap: 6px; }
+.role-tabs button {
+  flex: 1 1 0;
+  text-align: left;
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.role-list {
+  flex: 1 1 auto;
+  min-height: 160px;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: #fff;
+  padding: 4px;
+}
+
+.role-group { margin: 0 0 2px; }
+.role-group > summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-dim);
+  padding: 5px 6px;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 4px;
+  user-select: none;
+}
+.role-group > summary::-webkit-details-marker { display: none; }
+.role-group > summary:hover { background: #f4f6f8; }
+.role-group > summary::before { content: "▸"; font-size: 9px; color: var(--ink-faint); }
+.role-group[open] > summary::before { content: "▾"; }
+.cat-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+
+/* 계열 안에서 층위2·3 을 한 겹 더 접는다 — `직장·조직` 하나가 52개로 쏟아지지 않게 */
+.role-sub { margin: 0 6px 6px; }
+.role-sub > summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--ink-faint);
+  padding: 3px 4px;
+  list-style: none;
+  user-select: none;
+  border-radius: 4px;
+}
+.role-sub > summary::-webkit-details-marker { display: none; }
+.role-sub > summary::before { content: "▸ "; font-size: 9px; }
+.role-sub[open] > summary::before { content: "▾ "; }
+.role-sub > summary:hover { background: #f4f6f8; color: var(--ink-dim); }
+
+.role-items { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 6px 8px; }
+.role-btn {
+  font-size: 11.5px;
+  padding: 4px 8px;
+  min-height: 26px;
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+.role-btn.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+/* 층위2·3 은 접힌 채로 시작하고, 펼쳐도 층위1 과 무게가 다르다는 게 보인다 */
+.role-btn.tier-off { color: var(--ink-dim); }
+/* 그룹 계열은 v1 에 표현할 자리가 없다 — 흐리게(§5) */
+.role-btn.group-only { opacity: .55; font-style: italic; }
+/* 저장소 목록에 없는 임시 어휘 */
+.role-btn.temp::after { content: " ·임시"; font-size: 9.5px; color: var(--ink-faint); }
+
+.role-mods { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--ink-soft); }
+.role-mods .mod { display: inline-flex; align-items: center; gap: 4px; }
+.role-mods label { user-select: none; }
+
+.role-hint { font-size: 11.5px; color: var(--ink-dim); min-height: 16px; line-height: 1.5; }
+.role-none { padding: 14px; font-size: 12px; color: var(--ink-dim); text-align: center; }
 
 .checklist { list-style: none; margin: 0; padding: 0; }
 .checklist li { display: flex; align-items: center; gap: 7px; padding: 3px 0; }
