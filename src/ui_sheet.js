@@ -11,8 +11,8 @@
 //
 // 시트 한 번 저장 = 되돌리기 `1개`(§8).
 
-import { byId } from './state.js?v=20260726j';
-import { updateCharacter, groupNames, groupColor } from './model.js?v=20260726j';
+import { byId } from './state.js?v=20260727a';
+import { updateCharacter, groupNames, groupColor } from './model.js?v=20260727a';
 
 const SWATCHES = [
   ['자동', null],

@@ -2,12 +2,12 @@
 //
 // 상태를 바꾸는 건 전부 state.mutate() 를 지난다.
 
-import { state, mutate, parsed, byName as findByName, byId as findById } from './state.js?v=20260726j';
-import { norm, parseDocument, makeContext } from './parse.js?v=20260726j';
-import { mergeRoles } from './roles.js?v=20260726j';
+import { state, mutate, parsed, byName as findByName, byId as findById } from './state.js?v=20260727a';
+import { norm, parseDocument, makeContext } from './parse.js?v=20260727a';
+import { mergeRoles } from './roles.js?v=20260727a';
 import {
   findLinesWithName, removeLines, renameInLines, replaceLine, serializeRelation,
-} from './serialize.js?v=20260726j';
+} from './serialize.js?v=20260727a';
 
 // ─────────────────────────────────────────── id — 영구 결번(§4)
 

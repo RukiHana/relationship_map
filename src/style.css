@@ -426,10 +426,12 @@ button.primary { font-weight: 700; }
 
 #graph-tools { flex-wrap: wrap; max-width: calc(100% - 24px); }
 
-/* 선 후보 목록 — 거의 겹친 두 선을 눌렀을 때(§7) */
-#edge-pick {
+/* 관계도 위 작은 메뉴 — 선 후보 고르기(§7) · 우클릭 · 평행선 중 고르기가 전부 여기다 */
+#graph-menu {
   position: absolute;
   z-index: 6;
+  min-width: 150px;
+  max-width: 280px;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -438,13 +440,31 @@ button.primary { font-weight: 700; }
   font-size: 12px;
   display: none;
 }
-#edge-pick.open { display: block; }
-#edge-pick button {
+#graph-menu.open { display: block; }
+#graph-menu button {
   display: block; width: 100%;
   text-align: left;
   border: 0; border-radius: 0;
+  font-size: 12px;
+  padding: 6px 12px;
+  min-height: 30px;
+}
+#graph-menu button:hover { background: #f4f6f8; }
+#graph-menu button.danger { color: #8b3a3a; }
+#graph-menu hr {
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  margin: 4px 0;
+}
+/* 제목은 관계 줄이다 — 텍스트 목록과 같은 모노스페이스로 둬야 같은 것으로 읽힌다 */
+#graph-menu .menu-title {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  padding: 5px 12px 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ─────────────────────────────────────────── 텍스트 목록 (2층) */
@@ -776,7 +796,7 @@ button.primary { font-weight: 700; }
   #app { height: auto; display: block; }
 
   #topbar, #notices, #statusbar, #divider,
-  #graph-tools, #legend, #card, #edge-pick, #list-tools, #modal-back { display: none !important; }
+  #graph-tools, #legend, #card, #graph-menu, #list-tools, #modal-back { display: none !important; }
 
   #split { display: block; }
 

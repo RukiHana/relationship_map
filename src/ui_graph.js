@@ -11,10 +11,10 @@
 // 아이패드에는 1단계가 없다 — 터치에 호버가 없어서 탭하면 곧바로 2단계로 간다.
 // **길게 누르기는 쓰지 않는다.** 브라우저 자체 메뉴와 충돌한다.
 
-import { state, parsed, adjacency, vocabulary, touchUI, subscribe, byId } from './state.js?v=20260726j';
-import { moveCharacter, groupColor } from './model.js?v=20260726j';
-import { colorOf, styleOf } from './roles.js?v=20260726j';
-import { matchesQuery } from './parse.js?v=20260726j';
+import { state, parsed, adjacency, vocabulary, touchUI, subscribe, byId } from './state.js?v=20260727a';
+import { moveCharacter, groupColor } from './model.js?v=20260727a';
+import { colorOf, styleOf } from './roles.js?v=20260727a';
+import { matchesQuery } from './parse.js?v=20260727a';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -23,6 +23,8 @@ const NEAR_NODE = 30;     // 노드 반경 + 이만큼은 선 판정에서 뺀�
 const HIT_PX = 30;        // 이보다 멀면 빈 곳 클릭
 const TIE_PX = 8;         // 후보 둘의 차가 이 안이면 묻는다
 const TAP_PX = 5;         // 이 안에서 뗐으면 끈 게 아니라 누른 것
+const DBL_MS = 400;       // 두 번째 탭이 이 안에 오면 더블
+const DBL_PX = 12;        // 그리고 이만큼 안에서
 const PARALLEL_GAP = 20;  // 평행선 벌림
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 3;
@@ -61,7 +63,7 @@ export function initGraph(opts = {}) {
   graph.addEventListener('pointercancel', onPointerCancel);
   graph.addEventListener('lostpointercapture', onPointerCancel);
   graph.addEventListener('wheel', onWheel, { passive: false });
-  graph.addEventListener('contextmenu', (e) => e.preventDefault());
+  graph.addEventListener('contextmenu', onContextMenu);
 
   subscribe(render);
   render();
@@ -136,6 +138,26 @@ function nodeFromEvent(e) {
   return el ? el.dataset.id : null;
 }
 
+// ── 더블탭
+//
+// `dblclick` 이벤트를 안 쓴다. **포인터 이벤트만 쓴다**(§7) — 그래야 마우스·손가락·
+// 펜이 한 코드로 처리되고, 우리 pointerup 흐름과 상태가 어긋나지 않는다.
+let lastTap = null;            // { at, x, y, what }  what: `node:P01` | `edge` | null
+let lastPointerType = 'mouse'; // contextmenu 가 터치에서 왔는지 가리는 데 쓴다
+
+/** 이번 탭이 앞 탭과 같은 대상·짧은 시간·가까운 자리면 더블이다. */
+function isDoubleTap(e, what) {
+  const now = Date.now();
+  const hit = lastTap
+    && lastTap.what === what
+    && now - lastTap.at < DBL_MS
+    && Math.abs(e.clientX - lastTap.x) < DBL_PX
+    && Math.abs(e.clientY - lastTap.y) < DBL_PX;
+  // 더블로 판정했으면 기록을 비운다 — 세 번째 탭이 또 더블이 되면 안 된다
+  lastTap = hit ? null : { at: now, x: e.clientX, y: e.clientY, what };
+  return hit;
+}
+
 /**
  * 관계 카드 · 도구 단추 · 선 후보 목록은 **관계도 위에 떠 있는 별개의 UI** 다.
  * 다만 DOM 상으로는 `.graph` 안에 있어서 포인터 이벤트가 여기까지 올라온다.
@@ -145,11 +167,16 @@ function nodeFromEvent(e) {
  * DOM 에서 사라진다. 그러면 click 이 아예 안 와서 아무 일도 일어나지 않는다.**
  */
 function onOverlay(e) {
-  return !!e.target.closest?.('#card, #graph-tools, #edge-pick');
+  return !!e.target.closest?.('#card, #graph-tools, #graph-menu');
 }
 
 function onPointerDown(e) {
+  // 메뉴가 열려 있으면 관계도를 누르는 첫 동작은 **닫기로만** 쓴다
+  if (menuOpen() && !onOverlay(e)) { hideMenu(); lastTap = null; return; }
   if (onOverlay(e)) return;
+
+  // 우클릭이 터치에서 온 건지 가리려고 기억해 둔다(onContextMenu 참조)
+  lastPointerType = e.pointerType;
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
   if (pointers.size === 2) {
@@ -267,8 +294,11 @@ function onPointerUp(e) {
     drag = null;
     if (wasDrag.moved) {
       moveCharacter(wasDrag.id, wasDrag.x, wasDrag.y);   // ← 여기가 `1개` 다(§8)
+      lastTap = null;                                     // 끈 뒤의 탭이 더블로 안 세어지게
     } else if (connectMode) {
       tapInConnectMode(wasDrag.id);                       // 아이패드 경로 — A 탭 → B 탭
+    } else if (isDoubleTap(e, `node:${wasDrag.id}`)) {
+      hooks.onNodeActivate?.(wasDrag.id);                 // 두 번 누르면 시트
     } else {
       select(wasDrag.id);                                 // 2단계 — 고정
     }
@@ -282,11 +312,42 @@ function onPointerUp(e) {
     // 3단계 — 고정 상태에서 선 클릭. **전체 보기에서는 선 클릭을 안 받는다**(조망용)
     if (state.ui.focusId && !state.ui.showAll) {
       const hit = pickEdge(e.clientX, e.clientY);
-      if (hit === 'ask') return;
-      if (hit) { openEdge(hit); return; }
+      if (hit === 'ask') { lastTap = null; return; }       // 후보 목록이 떴다 — 더블로 안 센다
+      if (hit) {
+        // 한 번 = 보기(라벨 + 텍스트로 이동), 두 번 = 고치기
+        if (isDoubleTap(e, `edge:${hit.key}`)) hooks.onEdgeActivate?.(hit);
+        else openEdge(hit);
+        return;
+      }
     }
+    lastTap = null;
     select(null);                                          // 빈 곳을 눌러 푼다
   }
+}
+
+/**
+ * 우클릭 메뉴.
+ *
+ * ⚠ **터치에서 온 것은 무시한다.** iPadOS 는 **길게 누르면** `contextmenu` 를 쏘는데,
+ *   §7 이 「길게 누르기는 쓰지 않는다 — 브라우저 자체 메뉴와 충돌해서 「앱이 고장난
+ *   것 같다」는 인상을 주는 대표적 원인이다」로 못 박았다. 그래서 이 메뉴는
+ *   마우스·트랙패드 전용이고, 아이패드는 카드의 `고치기` 가 정식 경로로 남는다.
+ *   브라우저 기본 메뉴를 막는 preventDefault 는 예전처럼 늘 건다.
+ */
+function onContextMenu(e) {
+  e.preventDefault();
+  if (onOverlay(e)) return;
+  if (lastPointerType === 'touch' || lastPointerType === 'pen') return;
+
+  hideMenu();
+  const id = nodeFromEvent(e);
+  if (id) { hooks.onNodeContext?.(id, e.clientX, e.clientY); return; }
+
+  // 선은 클릭과 같은 조건에서만 받는다 — 고정 상태이고 전체 보기가 아닐 때
+  if (!state.ui.focusId || state.ui.showAll) return;
+  const hit = pickEdge(e.clientX, e.clientY);
+  if (!hit || hit === 'ask') return;      // 'ask' 면 후보 목록이 이미 떴다
+  hooks.onEdgeContext?.(hit, e.clientX, e.clientY);
 }
 
 function onPointerCancel(e) {
@@ -357,7 +418,7 @@ function onWheel(e) {
 
 export function select(id) {
   openEdgeKey = null;
-  hideEdgePick();
+  hideMenu();
   touchUI((ui) => { ui.focusId = id; ui.hoverId = null; });
   render();
   hooks.onSelect?.(id);
@@ -630,21 +691,61 @@ function pickEdge(clientX, clientY) {
   return ranked[0].group;
 }
 
+/** 「거의 겹친 두 선 중 어느 쪽?」도 그냥 메뉴다 — 아래 showMenu 를 쓴다. */
 function showEdgePick(clientX, clientY, groups) {
-  const box = document.getElementById('edge-pick');
+  showMenu(clientX, clientY, groups.map((g) => ({
+    label: `${byId(g.rels[0].idA)?.name ?? '?'}-${byId(g.rels[0].idB)?.name ?? '?'}`,
+    onClick: () => openEdge(g),
+  })));
+}
+
+// ─────────────────────────────────────────── 관계도 위 작은 메뉴
+//
+// 선 후보 고르기 · 우클릭 메뉴 · 평행선 중 고르기가 전부 같은 물건이라 하나로 둔다.
+//
+// @param items  { label, onClick } | { divider: true } | { title }
+
+export function showMenu(clientX, clientY, items) {
+  const box = document.getElementById('graph-menu');
+  if (!box || !items?.length) return;
   const r = graph.getBoundingClientRect();
   box.textContent = '';
-  for (const g of groups) {
-    const a = byId(g.rels[0].idA)?.name ?? '?';
-    const b = byId(g.rels[0].idB)?.name ?? '?';
+
+  for (const it of items) {
+    if (it.divider) { box.appendChild(document.createElement('hr')); continue; }
+    if (it.title !== undefined) {
+      const t = document.createElement('div');
+      t.className = 'menu-title';
+      t.textContent = it.title;
+      box.appendChild(t);
+      continue;
+    }
     const btn = document.createElement('button');
-    btn.textContent = `${a}-${b}`;
-    btn.addEventListener('click', (e) => { e.stopPropagation(); hideEdgePick(); openEdge(g); });
+    btn.textContent = it.label;
+    if (it.danger) btn.classList.add('danger');
+    // stopPropagation 이 있어도 onOverlay 로 한 번 더 막는다 — 그쪽이 근본이다
+    btn.addEventListener('click', (e) => { e.stopPropagation(); hideMenu(); it.onClick?.(); });
     box.appendChild(btn);
   }
-  box.style.left = `${Math.min(clientX - r.left, r.width - 160)}px`;
-  box.style.top = `${Math.min(clientY - r.top, r.height - 40 - groups.length * 26)}px`;
+
+  // 먼저 붙여서 실제 크기를 재고, 그다음 화면 안으로 밀어 넣는다
+  box.style.left = '0px';
+  box.style.top = '0px';
   box.classList.add('open');
+  const w = box.offsetWidth, h = box.offsetHeight;
+  box.style.left = `${Math.max(4, Math.min(clientX - r.left, r.width - w - 8))}px`;
+  box.style.top = `${Math.max(4, Math.min(clientY - r.top, r.height - h - 8))}px`;
+}
+
+export function hideMenu() {
+  const box = document.getElementById('graph-menu');
+  if (!box) return;
+  box.classList.remove('open');
+  box.textContent = '';        // 다음에 열 때 옛 항목이 남아 있지 않게
+}
+
+export function menuOpen() {
+  return !!document.getElementById('graph-menu')?.classList.contains('open');
 }
 
 // ─────────────────────────────────────────── SVG 내보내기(§7)
@@ -751,9 +852,3 @@ function resolveVar(value) {
   return v || '#8a94a3';
 }
 
-function hideEdgePick() {
-  const box = document.getElementById('edge-pick');
-  if (!box) return;
-  box.classList.remove('open');
-  box.textContent = '';        // 다음에 열 때 옛 후보가 남아 있지 않게
-}

@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="charmap">
 <meta name="color-scheme" content="light">
 <title>charmap</title>
-<link rel="stylesheet" href="src/style.css?v=20260726j">
+<link rel="stylesheet" href="src/style.css?v=20260727a">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='9' cy='10' r='4' fill='%238a94a3'/><circle cx='23' cy='21' r='4' fill='%235c6675'/><path d='M11 13 L21 18' stroke='%23c2683f' stroke-width='2'/></svg>">
 </head>
 <body>
@@ -48,7 +48,8 @@
         <!-- 관계 카드 — 읽기 전용. 선 클릭 판정이 완벽하지 않아도 되는 이유가 이것이다(§7) -->
         <div id="card" aria-live="polite"></div>
 
-        <div id="edge-pick"></div>
+        <!-- 선 후보 고르기 · 우클릭 메뉴 · 평행선 중 고르기가 전부 여기로 뜬다 -->
+        <div id="graph-menu"></div>
 
         <div id="graph-tools">
           <!-- 아이패드에서 관계를 만드는 정식 경로. 켜고 A 탭 → B 탭 (§7) -->
@@ -97,7 +98,7 @@
 
 <div id="modal-back"></div>
 
-<script type="module" src="src/main.js?v=20260726j"></script>
+<script type="module" src="src/main.js?v=20260727a"></script>
 <noscript>이 도구는 자바스크립트가 있어야 돕니다.</noscript>
 
 </body>

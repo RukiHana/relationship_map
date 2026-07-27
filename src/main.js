@@ -4,35 +4,36 @@
 // 조용한 복원은 하지 않는다 — 그 상태에서 파일을 가져오면 「아까 그건 어디 갔지」가
 // 된다(계획서 §8).
 
-import { VERSION } from './version.js?v=20260726j';
+import { VERSION } from './version.js?v=20260727a';
 import {
   state, subscribe, hydrate, mutate, touchUI, undo, redo, canUndo, canRedo,
   dirtyCount, markExported, parsed, vocabulary, setSaver, flushSave, byId,
-} from './state.js?v=20260726j';
+} from './state.js?v=20260727a';
 import {
   addCharacter, previewRename, applyRename, previewDelete, applyDelete,
   loadBundle, addSessionRole, tidyLayout,
   appendRelationLine, replaceRelationLine, deleteRelationLine,
-} from './model.js?v=20260726j';
-import { groupByCategory, clipboardForRepo } from './roles.js?v=20260726j';
-import { serializeRelation, replaceLine } from './serialize.js?v=20260726j';
-import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260726j';
+} from './model.js?v=20260727a';
+import { groupByCategory, clipboardForRepo } from './roles.js?v=20260727a';
+import { serializeRelation, replaceLine } from './serialize.js?v=20260727a';
+import { initText, flushText, focusOnLine, relationLinesText } from './ui_text.js?v=20260727a';
 import {
   initGraph, select, toggleShowAll, setHotRelation, fitToView,
   setConnectMode, isConnectMode,
   setHiddenCategories, hiddenCategories, setQuery, centerOn, buildSVG,
-} from './ui_graph.js?v=20260726j';
-import { pickRoles } from './ui_roles.js?v=20260726j';
-import { openSheet, characterJSON } from './ui_sheet.js?v=20260726j';
-import { initCard } from './ui_card.js?v=20260726j';
+  showMenu, hideMenu, menuOpen,
+} from './ui_graph.js?v=20260727a';
+import { pickRoles } from './ui_roles.js?v=20260727a';
+import { openSheet, characterJSON } from './ui_sheet.js?v=20260727a';
+import { initCard } from './ui_card.js?v=20260727a';
 import {
   initIO, saveWork, loadWork, clearWork, storageWorks, pushSnapshot,
   setOtherTabHandler, exportBundle, copyText, readFile, prepareImport, describeCompare,
   canSaveInPlace, saveInPlace, savedFileName,
-} from './io.js?v=20260726j';
+} from './io.js?v=20260727a';
 import {
   confirmBox, alertBox, promptBox, pasteBox, selectableBox, checkListBox, notice,
-} from './ui_dialog.js?v=20260726j';
+} from './ui_dialog.js?v=20260727a';
 
 const $ = (id) => document.getElementById(id);
 
@@ -53,6 +54,10 @@ async function boot() {
   initGraph({
     onSelect: () => {},
     onEdgeOpen,
+    onEdgeActivate,
+    onEdgeContext,
+    onNodeActivate: doSheet,
+    onNodeContext,
     onConnect,
     onConnectToEmpty,
     onConnectModeChange: (on) => {
@@ -800,8 +805,9 @@ function wireKeys() {
   });
 }
 
-/** Esc 는 가장 안쪽부터 하나씩 벗긴다 — 창 → 검색 → 연결 모드 → 선택. */
+/** Esc 는 가장 안쪽부터 하나씩 벗긴다 — 메뉴 → 창 → 검색 → 연결 모드 → 선택. */
 function onEscape() {
+  if (menuOpen()) { hideMenu(); return; }
   const back = $('modal-back');
   if (back.classList.contains('open')) {
     const b = [...back.querySelectorAll('.foot button')]
@@ -969,6 +975,68 @@ async function doExportSVG() {
 function onEdgeOpen(rels) {
   if (!rels?.length) return;
   focusOnLine(rels[0].lineIndex);
+}
+
+// ─────────────────────────────────────────── 관계도에서 바로 고치기
+//
+// **여기서 새 편집 경로를 만들지 않는다.** 전부 이미 있는 함수를 부르기만 한다 —
+// §4 의 「줄 하나만 갈아끼운다」가 그 안에 들어 있고, 두 번째 경로를 만들면
+// 그 규칙이 두 군데로 갈린다.
+
+/** 선을 두 번 눌렀을 때. 관계가 하나면 바로 열고, 여럿이면 어느 줄인지 묻는다. */
+function onEdgeActivate(group) {
+  if (group.rels.length === 1) { editRelationLine(group.rels[0].lineIndex); return; }
+  const r = group.rels[0];
+  const at = midOf(group);
+  showMenu(at.x, at.y, edgeMenuItems(group, { title: `${r.nameA}-${r.nameB} — 어느 관계?` }));
+}
+
+function onEdgeContext(group, x, y) {
+  showMenu(x, y, edgeMenuItems(group));
+}
+
+/**
+ * 같은 두 사람 사이 관계가 여럿일 수 있다(§4). 편집은 **줄 단위**이므로
+ * 줄마다 묶어서 나열한다 — 관계가 하나면 제목 없이 항목 셋이다.
+ */
+function edgeMenuItems(group, { title = null } = {}) {
+  const items = [];
+  if (title) items.push({ title });
+
+  group.rels.forEach((rel, i) => {
+    if (group.rels.length > 1) {
+      if (i > 0) items.push({ divider: true });
+      items.push({ title: rel.raw });
+    }
+    items.push({ label: '고치기', onClick: () => editRelationLine(rel.lineIndex) });
+    items.push({ label: '지우기', danger: true, onClick: () => removeRelationLine(rel.lineIndex) });
+    items.push({ label: '텍스트에서 보기', onClick: () => focusOnLine(rel.lineIndex) });
+  });
+  return items;
+}
+
+/** 더블클릭에는 좌표가 안 넘어오므로 그 선의 가운데를 화면 좌표로 계산한다. */
+function midOf(group) {
+  const r = $('graph').getBoundingClientRect();
+  const { tx, ty, scale } = state.ui;
+  const a = byId(group.rels[0].idA)?.pos ?? [0, 0];
+  const b = byId(group.rels[0].idB)?.pos ?? [0, 0];
+  return {
+    x: r.left + tx + ((a[0] + b[0]) / 2) * scale,
+    y: r.top + ty + ((a[1] + b[1]) / 2) * scale,
+  };
+}
+
+function onNodeContext(id, x, y) {
+  const c = byId(id);
+  if (!c) return;
+  showMenu(x, y, [
+    { title: c.name },
+    { label: '시트', onClick: () => doSheet(id) },
+    { label: '이름 변경', onClick: () => doRename(id) },
+    { divider: true },
+    { label: '삭제', danger: true, onClick: () => doDelete(id) },
+  ]);
 }
 
 // ─────────────────────────────────────────── 관계 만들기 (2단계)

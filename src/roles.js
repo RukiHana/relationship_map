@@ -7,7 +7,7 @@
 //
 // **규칙 — 합치되, 겹치면 저장소 파일이 이긴다.**
 
-import { norm, buildRoleIndex } from './parse.js?v=20260726j';
+import { norm, buildRoleIndex } from './parse.js?v=20260727a';
 
 const FALLBACK_CATEGORY = {
   id: '_unknown', label: '분류 없음', tier: 1, color: '#b6bcc4', style: 'solid',
